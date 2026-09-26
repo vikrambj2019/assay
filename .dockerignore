@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+*session.json
+**/*session.json
+.git
+.venv
+venv
+__pycache__
+**/__pycache__
+.pytest_cache
+results

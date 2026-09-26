@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bta"
+version = "0.0.0"
+description = "Natural-language browser testing agent"
+# 3.10 to match the official Playwright jammy image (Ubuntu 22.04 ships Python
+# 3.10). Code stays 3.10-safe via `from __future__ import annotations`. The
+# blueprint's "3.11+" is the design ideal; Docker pins us to the image's Python.
+requires-python = ">=3.10"
+dependencies = [
+    # Pinned to match the Playwright base image tag in the Dockerfile; the pip
+    # package and the image's preinstalled browser binaries must be the same version.
+    "playwright>=1.61.0",
+    # Claude Agent SDK — drives the Claude Code CLI as a subprocess.
+    "claude-agent-sdk>=0.2",
+    # Suite runner — parses YAML test suites.
+    "PyYAML>=6.0",
+    # Anthropic Python SDK — used by AnthropicPlannerAdapter for direct API calls.
+    "anthropic>=0.40",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    # Synthetic fixture demo app (Task 16 evaluation harness)
+    "flask>=3.0",
+]
+
+[project.scripts]
+agent = "harness.cli:main"
+bta   = "harness.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["core*", "harness*", "fixture*"]
+
+[tool.setuptools.package-data]
+core = ["snapshot/dom_walk.js"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]

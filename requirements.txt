@@ -1,0 +1,16 @@
+# Runtime (Phase 0 substrate)
+# Pinned to match the Playwright base image tag in the Dockerfile — the pip
+# package and the image's preinstalled browsers must be the same version.
+playwright==1.61.0
+
+# The agent — Claude Agent SDK (drives the Claude Code CLI as a subprocess;
+# the CLI + Node.js are installed in the Dockerfile). Reads ANTHROPIC_API_KEY.
+claude-agent-sdk>=0.2
+
+# Suite runner — parses the YAML test suite (`agent suite tests/suite.yaml`).
+PyYAML>=6.0
+
+# Dev / tests
+pytest>=8.0
+pytest-asyncio>=0.24
+flask>=3.0

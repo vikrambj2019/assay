@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+jobs:
+  # ── Unit tests ──────────────────────────────────────────────────────────────
+  # Runs without model credentials or a real application.
+  # Fork PRs can run this safely — no secrets are accessed.
+  unit-tests:
+    name: Unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies (no browser)
+        run: pip install -e ".[dev]" flask
+
+      - name: Run unit tests
+        # Explicit list excludes tests that require Playwright or a live LLM.
+        # Browser integration tests run in the separate browser-tests job below.
+        run: |
+          python -m pytest \
+            tests/test_plan.py \
+            tests/test_planner.py \
+            tests/test_auth_policy.py \
+            tests/test_executor.py \
+            tests/test_budget.py \
+            tests/test_check_report.py \
+            tests/test_context.py \
+            tests/test_env_config.py \
+            tests/test_fixture_ground_truth.py \
+            -v --tb=short
+          # test_redact.py has browser-integration tests mixed with unit tests;
+          # the full file runs in the browser-tests job below.
+
+  # ── Browser integration tests ───────────────────────────────────────────────
+  # Requires Playwright Chromium. Runs on trusted branches; fork PRs are
+  # excluded by the pull_request trigger combined with no secrets being needed.
+  browser-tests:
+    name: Browser integration tests
+    runs-on: ubuntu-latest
+    # Browser tests use only local fakes and fixture data; no secrets are read.
+    # Run them on pushes and pull requests so CI covers the full suite.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies + Playwright
+        run: |
+          pip install -e ".[dev]"
+          playwright install chromium --with-deps
+
+      - name: Run all tests (including browser)
+        run: python -m pytest tests/ -v --tb=short --ignore=tests/test_skills.py
+
+  # ── Live-model evaluation (opt-in, trusted only) ────────────────────────────
+  # Requires ANTHROPIC_API_KEY and BTA_BASE_URL secrets.
+  # Only runs when manually dispatched — never on fork PRs.
+  live-eval:
+    name: Live-model fixture evaluation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies + Playwright
+        run: |
+          pip install -e ".[dev]"
+          playwright install chromium --with-deps
+
+      - name: Start fixture app
+        run: |
+          flask --app fixture.app.factory:create_app run --port 5173 &
+          sleep 2
+
+      - name: Run live evaluation
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BTA_BASE_URL: http://localhost:5173
+          BTA_DEPTH: low
+          BTA_ALLOW_MUTATIONS: "false"
+        run: |
+          BTA_EVAL_LIVE=1 agent suite suites/fixture-demo.yaml

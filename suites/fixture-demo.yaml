@@ -1,0 +1,49 @@
+# Synthetic fixture demo suite — uses the fixture app from fixture/app/factory.py
+#
+# Start the fixture app first:
+#   flask --app fixture.app.factory:create_app run --port 5173
+#
+# Then run:
+#   agent suite suites/fixture-demo.yaml
+#
+# This suite drives a real browser against the local fixture app.
+# No external service, no real credentials, no remote app mutations.
+
+defaults:
+  base_url: http://localhost:5173
+  headless: true
+  model: claude-sonnet-4-6
+  effort: high
+  slowmo_ms: 0
+  max_parallel: 1   # fixture app uses in-memory state; keep sequential
+
+tests:
+  - name: login
+    goal: >-
+      Open {base_url} and log in using the fixture-login skill.
+      Confirm the dashboard loads after login.
+
+  - name: record-creation
+    needs: [login]
+    goal: >-
+      Open {base_url}/records and add a new record with name "Sprocket",
+      quantity 3, price 4.99. Confirm the "Record saved" banner appears
+      after submission.
+
+  - name: form-validation
+    needs: [login]
+    goal: >-
+      Open {base_url}/records and submit the add-record form with the name
+      field empty. Confirm an error message is shown and no record is created.
+
+  - name: edit-persistence
+    needs: [record-creation]
+    goal: >-
+      Open {base_url}/records/1 and change the record name to "Updated Widget".
+      Save, then reload the page. Confirm the new name is still shown after reload.
+
+  - name: navigation
+    needs: [login]
+    goal: >-
+      Open {base_url}/records and click the link for "Widget A". Confirm the
+      detail page loads and shows the record's name, quantity, and total.
