@@ -1,4 +1,4 @@
-"""Structured test-plan schema for `bta check`.
+"""Structured test-plan schema for `assay check`.
 
 A Plan is the source of truth for what a run intends to verify and why.
 It is created by the planner (Task 11), validated, and persisted as

@@ -72,7 +72,7 @@ jobs:
         run: python -m pytest tests/ -v --tb=short --ignore=tests/test_skills.py
 
   # ── Live-model evaluation (opt-in, trusted only) ────────────────────────────
-  # Requires ANTHROPIC_API_KEY and BTA_BASE_URL secrets.
+  # Requires ANTHROPIC_API_KEY and ASSAY_BASE_URL secrets.
   # Only runs when manually dispatched — never on fork PRs.
   live-eval:
     name: Live-model fixture evaluation
@@ -99,8 +99,8 @@ jobs:
       - name: Run live evaluation
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          BTA_BASE_URL: http://localhost:5173
-          BTA_DEPTH: low
-          BTA_ALLOW_MUTATIONS: "false"
+          ASSAY_BASE_URL: http://localhost:5173
+          ASSAY_DEPTH: low
+          ASSAY_ALLOW_MUTATIONS: "false"
         run: |
-          BTA_EVAL_LIVE=1 agent suite suites/fixture-demo.yaml
+          ASSAY_EVAL_LIVE=1 agent suite suites/fixture-demo.yaml

@@ -75,7 +75,7 @@ def load_suite(path: str | Path) -> tuple[list[TestSpec], int]:
     if max_parallel < 1:
         raise ValueError(f"max_parallel must be at least 1, got {max_parallel}")
     # Suite-level base_url beats the env var; env var beats nothing.
-    base_url = defaults.get("base_url") or os.environ.get("BTA_BASE_URL", "")
+    base_url = defaults.get("base_url") or os.environ.get("ASSAY_BASE_URL", "")
 
     specs: list[TestSpec] = []
     for raw in data.get("tests") or []:
@@ -214,7 +214,7 @@ async def _run_test(spec: TestSpec, cfg_base: Config, suite_dir: Path,
             # Keep the isolated runtime copy outside the results tree. Auth state
             # contains cookies/tokens and must never be a shareable artifact.
             if shared.exists():
-                tmp = tempfile.NamedTemporaryFile(prefix="bta-session-", suffix=".json", delete=False)
+                tmp = tempfile.NamedTemporaryFile(prefix="assay-session-", suffix=".json", delete=False)
                 tmp.close()
                 session_copy = Path(tmp.name)
                 shutil.copy(shared, session_copy)  # isolated read-copy; never clobbers shared

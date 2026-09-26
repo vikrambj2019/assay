@@ -1,6 +1,6 @@
 ---
 name: fixture-login
-description: Log in to the BTA synthetic fixture app. Use whenever a login form is shown and the goal requires an authenticated session.
+description: Log in to the Assay synthetic fixture app. Use whenever a login form is shown and the goal requires an authenticated session.
 ---
 
 1. Open http://localhost:5173/login if not already on the login page.

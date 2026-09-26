@@ -51,7 +51,7 @@ def test_longer_secret_wins_over_prefix():
 
 
 def test_make_redactor_reads_env(monkeypatch):
-    monkeypatch.setenv("BTA_TEST_PASSWORD", "hunter2")
+    monkeypatch.setenv("ASSAY_TEST_PASSWORD", "hunter2")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fixture")
     r = make_redactor()
     assert r.scrub("password=hunter2 key=sk-ant-fixture") == \
@@ -60,7 +60,7 @@ def test_make_redactor_reads_env(monkeypatch):
 
 def test_make_redactor_skips_unset_env(monkeypatch):
     for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
-                "BTA_TEST_PASSWORD", "BTA_TEST_USERNAME"):
+                "ASSAY_TEST_PASSWORD", "ASSAY_TEST_USERNAME"):
         monkeypatch.delenv(var, raising=False)
     r = make_redactor()
     assert r.scrub("nothing to redact") == "nothing to redact"

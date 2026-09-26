@@ -56,7 +56,7 @@ installed in the image). But the unit tests and CLI help run locally:
 pip install -e ".[dev]"       # installs runtime deps + pytest
 playwright install chromium   # required by the browser integration tests
 pytest -q                     # runs all tests (browser tests need chromium above)
-agent --help                  # or: bta --help
+agent --help                  # or: assay --help
 ```
 
 Browser tests (`test_actions.py`, `test_settle.py`, `test_snapshot_pipeline.py`)

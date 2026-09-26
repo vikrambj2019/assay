@@ -1,4 +1,4 @@
-"""Synthetic demo Flask app for the bta regression evaluation fixture.
+"""Synthetic demo Flask app for the assay regression evaluation fixture.
 
 ``create_app(bugs=[...])`` returns a Flask application configured with zero
 or more deliberate bugs enabled.  With an empty *bugs* list the app behaves
@@ -43,7 +43,7 @@ _USERS: dict[str, str] = {FIXTURE_USERNAME: FIXTURE_PASSWORD}
 
 _LOGIN_HTML = """\
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Login — BTA Fixture</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>Login — Assay Fixture</title></head>
 <body>
 <h1>Sign in</h1>
 {% if error %}<p id="login-error">{{ error }}</p>{% endif %}
@@ -57,7 +57,7 @@ _LOGIN_HTML = """\
 
 _DASHBOARD_HTML = """\
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Dashboard — BTA Fixture</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>Dashboard — Assay Fixture</title></head>
 <body>
 <h1>Dashboard</h1>
 <p id="welcome-msg">Welcome, {{ user }}!</p>
@@ -67,7 +67,7 @@ _DASHBOARD_HTML = """\
 
 _RECORDS_HTML = """\
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Records — BTA Fixture</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>Records — Assay Fixture</title></head>
 <body>
 <h1>Records</h1>
 {% if saved %}<p id="toast-saved">Record saved</p>{% endif %}
@@ -95,7 +95,7 @@ _RECORDS_HTML = """\
 
 _DETAIL_HTML = """\
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>{{ record['name'] }} — BTA Fixture</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>{{ record['name'] }} — Assay Fixture</title></head>
 <body>
 <h1 id="record-name">{{ record['name'] }}</h1>
 <p>Quantity: <span id="record-qty">{{ record['quantity'] }}</span></p>
@@ -130,7 +130,7 @@ def create_app(bugs: list[str] | None = None) -> Flask:
         an independent in-memory data store so tests are isolated.
     """
     app = Flask(__name__)
-    app.secret_key = "bta-fixture-dev-key-not-for-production"
+    app.secret_key = "assay-fixture-dev-key-not-for-production"
     active_bugs: frozenset[str] = frozenset(bugs or [])
 
     # Per-instance in-memory record store.

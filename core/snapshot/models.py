@@ -3,7 +3,7 @@
 A Snapshot carries both "what can I do" (interactive nodes with an ``index``) and
 "what is true" (roles, names, states, visible text). The ``index → locator`` map
 is not stored explicitly: each interactive element was tagged with
-``data-bta-index`` during capture, so Actions (core/actions.py) resolve an index
+``data-assay-index`` during capture, so Actions (core/actions.py) resolve an index
 to a live Playwright locator on demand. Indices appear in the rendered text;
 selectors never do.
 """

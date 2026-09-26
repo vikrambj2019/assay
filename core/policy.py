@@ -1,4 +1,4 @@
-"""Execution policies for `bta check` runs.
+"""Execution policies for `assay check` runs.
 
 Two policies are enforced at run time:
 
@@ -30,8 +30,8 @@ class OriginPolicy:
     """Restricts which origins the browser agent may navigate to.
 
     An empty allowed_origins list means no restriction (all origins allowed).
-    The list is populated from BTA_ALLOWED_ORIGINS, defaulting to the origin
-    of BTA_BASE_URL.
+    The list is populated from ASSAY_ALLOWED_ORIGINS, defaulting to the origin
+    of ASSAY_BASE_URL.
 
     Subresource requests (images, scripts, fonts loaded by the page) are not
     blocked — this policy applies only to top-level navigation actions.
@@ -100,9 +100,9 @@ class MutationPolicy:
         if not scenario.requires_mutations:
             return True, ""
         if self.allow_mutations:
-            return True, "mutation scenario permitted by BTA_ALLOW_MUTATIONS=true"
+            return True, "mutation scenario permitted by ASSAY_ALLOW_MUTATIONS=true"
         return False, (
             f"scenario {scenario.id!r} ({scenario.title!r}) requires mutations "
-            f"but BTA_ALLOW_MUTATIONS is false — this is an action policy, not a "
+            f"but ASSAY_ALLOW_MUTATIONS is false — this is an action policy, not a "
             f"guarantee that the server is read-only"
         )

@@ -1,4 +1,4 @@
-"""Context collection for `bta check`.
+"""Context collection for `assay check`.
 
 Loads the notes file, README, and optional git diff into a CheckContext.
 All files are scrubbed for secrets and subject to size limits; provenance
@@ -58,7 +58,7 @@ class TruncatedFile:
 
 @dataclass
 class CheckContext:
-    """Collected context for one `bta check` run.
+    """Collected context for one `assay check` run.
 
     Provenance (excluded, truncated, warnings) is always populated so the
     planner can include it in plan.json and the user understands exactly
@@ -87,7 +87,7 @@ def collect_context(
     *,
     cwd: Path | None = None,
 ) -> CheckContext:
-    """Load and validate all context for a `bta check` run.
+    """Load and validate all context for a `assay check` run.
 
     Args:
         notes:    Required notes/changes file (must exist).

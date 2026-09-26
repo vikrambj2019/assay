@@ -49,11 +49,11 @@ if TYPE_CHECKING:
 HARNESS_DIR = Path(__file__).resolve().parent  # SDK cwd → harness/.claude/skills discovery
 
 # allowed_tools: the whole callable set, all auto-approved (so no can_use_tool
-# callback is needed). Browser tools + report_stage + complete_goal (on "bta") and
+# callback is needed). Browser tools + report_stage + complete_goal (on "assay") and
 # TodoWrite; Read/Glob are only a latent fallback — the page arrives as each
 # action's result (harness/page.py), so nothing needs them. Skill is auto-approved
 # via skills="all".
-_TOOLS = [f"mcp__bta__{n}" for n in
+_TOOLS = [f"mcp__assay__{n}" for n in
           ("open_url", "click", "fill", "press", "select_option", "upload",
            "wait_for", "scroll", "hover", "go_back", "report_stage", "complete_goal")] + \
          ["TodoWrite", "Read", "Glob"]
@@ -61,7 +61,7 @@ _TOOLS = [f"mcp__bta__{n}" for n in
 # The base built-in `tools` set. Anything not listed (Bash, Write, Edit, WebFetch,
 # the Task/Cron tools…) never enters the model's context, so we don't pay for its
 # schema. Skill MUST be here: skills="all" only adds "Skill" to allowed_tools, not
-# to this base set — omit it and the model can't load skills. "bta" tools come via
+# to this base set — omit it and the model can't load skills. "assay" tools come via
 # mcp_servers, not here.
 _BUILTINS = ["Skill", "TodoWrite", "Read", "Glob"]
 
@@ -152,7 +152,7 @@ def build_options(cfg: "Config", *, system_prompt: str, server: "McpSdkServerCon
         model=cfg.model,
         effort=cfg.effort,  # type: ignore[arg-type]
         system_prompt=system_prompt,
-        mcp_servers={"bta": server},
+        mcp_servers={"assay": server},
         tools=tools,  # base built-in set; unlisted built-ins never enter context
         allowed_tools=allowed_tools,  # the whole callable set — all auto-approved
         hooks=hooks,
@@ -241,7 +241,7 @@ async def drive(options: ClaudeAgentOptions, prompt: str,
                         pending[block.id] = block.name
                         if block.name.endswith(("report_stage", "complete_goal")):
                             continue
-                        short = block.name.replace("mcp__bta__", "")
+                        short = block.name.replace("mcp__assay__", "")
                         emit(f"{_c('36', '⏺')} {_c('1', short)}"
                              f"{_c('2', '(' + _fmt_args(block.input) + ')')}")
             elif isinstance(msg, UserMessage):
@@ -406,7 +406,7 @@ async def run_goal(session: "BrowserSession", goal: str, cfg: "Config", out_dir:
         session, goal, out_dir, emit, records, redactor)
 
     server = create_sdk_mcp_server(
-        "bta", tools=[*browser_tools(
+        "assay", tools=[*browser_tools(
             session, records, out_dir, redactor,
             origin_policy=OriginPolicy(cfg.allowed_origins),
             budget=budget,

@@ -32,12 +32,12 @@ async def run_live_eval(
     """Score credentialed real-model runs supplied by *evaluate*.
 
     ``evaluate(spec, broken)`` must return ``(verdict, interventions, cost)``.
-    Live execution is opt-in through ``BTA_EVAL_LIVE=1`` and requires explicit
+    Live execution is opt-in through ``ASSAY_EVAL_LIVE=1`` and requires explicit
     model metadata.  Ground-truth labels remain in this process and are never
     passed to the evaluator callback.
     """
-    if os.environ.get("BTA_EVAL_LIVE") != "1":
-        raise RuntimeError("live evaluation is disabled; set BTA_EVAL_LIVE=1")
+    if os.environ.get("ASSAY_EVAL_LIVE") != "1":
+        raise RuntimeError("live evaluation is disabled; set ASSAY_EVAL_LIVE=1")
     if run_count < 1:
         raise ValueError("run_count must be at least 1")
     if not model or not model_version:

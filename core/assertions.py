@@ -1,4 +1,4 @@
-"""Deterministic assertion evaluation for `bta check` scenarios.
+"""Deterministic assertion evaluation for `assay check` scenarios.
 
 Each assertion in the plan may carry an optional ``check`` dict that
 specifies a machine-verifiable condition.  This module evaluates those

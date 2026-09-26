@@ -19,20 +19,24 @@ skills provide thin instructions around that interface.
 ### 2. Portable coding-agent skill — first implementation
 
 - Add `skills/browser-check/SKILL.md`.
-- Teach an agent when to run `bta check`, how to select depth, and how to read
+- Teach an agent when to run `assay check`, how to select depth, and how to read
   verdicts and reports.
 - Require local or trusted fixture apps, preserve mutation policy, and never
   request production credentials.
 - Keep the skill independent of any one coding-agent vendor.
 
-### 3. Stable machine interface
+### 3. Stable machine interface — implemented
 
-- Add `--format json` and `--output PATH` to `bta check`.
+- Add `--format json` and `--output PATH` to `assay check`.
+- Add frozen-plan reruns (`--plan PATH`, `--only SCENARIO_ID`) so a coding
+  agent's fix-and-verify loop cannot drift its expectations.
 - Preserve the existing report schemas and exit codes.
 - Add a small JSON summary suitable for CI and coding-agent consumption.
 
 ### 4. Demo packaging and video
 
+- Hosted synthetic demo: Driftline (https://driftline-demo.onrender.com),
+  a separate repository, used as the realistic demo target.
 - Add a one-command Docker demo service for the fixture app.
 - Record short synthetic videos: install/demo, failure report, and coding-agent
   invocation.

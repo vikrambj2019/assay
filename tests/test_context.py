@@ -102,7 +102,7 @@ def test_notes_loaded_correctly(tmp_path):
 
 def test_context_scrubs_configured_credentials(tmp_path, monkeypatch):
     secret = "fixture-context-secret"
-    monkeypatch.setenv("BTA_TEST_PASSWORD", secret)
+    monkeypatch.setenv("ASSAY_TEST_PASSWORD", secret)
     notes = tmp_path / "changes.md"
     notes.write_text(f"login password={secret}\n")
     readme = tmp_path / "README.md"
@@ -444,7 +444,7 @@ def test_check_subparser_exists():
 
 
 def test_check_help_exits_cleanly():
-    """bta check --help exits with code 0 and requires no secrets."""
+    """assay check --help exits with code 0 and requires no secrets."""
     from harness.cli import build_parser
     parser = build_parser()
     with pytest.raises(SystemExit) as exc_info:
@@ -453,7 +453,7 @@ def test_check_help_exits_cleanly():
 
 
 def test_missing_notes_arg_exits_nonzero():
-    """bta check with no --notes exits with code 2."""
+    """assay check with no --notes exits with code 2."""
     from harness.cli import build_parser
     parser = build_parser()
     with pytest.raises(SystemExit) as exc_info:

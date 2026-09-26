@@ -19,20 +19,20 @@ from core.config import Config, load_dotenv
 def test_dotenv_loads_values_into_env(tmp_path, monkeypatch):
     """Values in .env are visible after load_dotenv()."""
     env_file = tmp_path / ".env"
-    env_file.write_text("BTA_FIXTURE_KEY=hello\n")
-    monkeypatch.delenv("BTA_FIXTURE_KEY", raising=False)
+    env_file.write_text("ASSAY_FIXTURE_KEY=hello\n")
+    monkeypatch.delenv("ASSAY_FIXTURE_KEY", raising=False)
     load_dotenv(env_file)
-    assert os.environ["BTA_FIXTURE_KEY"] == "hello"
-    monkeypatch.delenv("BTA_FIXTURE_KEY", raising=False)  # cleanup
+    assert os.environ["ASSAY_FIXTURE_KEY"] == "hello"
+    monkeypatch.delenv("ASSAY_FIXTURE_KEY", raising=False)  # cleanup
 
 
 def test_process_env_wins_over_dotenv(tmp_path, monkeypatch):
     """An existing process env var is never overwritten by .env."""
-    monkeypatch.setenv("BTA_FIXTURE_KEY2", "from_process")
+    monkeypatch.setenv("ASSAY_FIXTURE_KEY2", "from_process")
     env_file = tmp_path / ".env"
-    env_file.write_text("BTA_FIXTURE_KEY2=from_dotenv\n")
+    env_file.write_text("ASSAY_FIXTURE_KEY2=from_dotenv\n")
     load_dotenv(env_file)
-    assert os.environ["BTA_FIXTURE_KEY2"] == "from_process"
+    assert os.environ["ASSAY_FIXTURE_KEY2"] == "from_process"
 
 
 def test_dotenv_strips_quotes(tmp_path, monkeypatch):
@@ -66,56 +66,56 @@ def test_dotenv_silent_when_file_missing(tmp_path):
 # ── URL / origin validation ───────────────────────────────────────────────────
 
 def test_invalid_base_url_raises(monkeypatch):
-    """BTA_BASE_URL with no scheme raises a ValueError in from_env()."""
-    monkeypatch.setenv("BTA_BASE_URL", "localhost:3000")
-    with pytest.raises(ValueError, match="BTA_BASE_URL"):
+    """ASSAY_BASE_URL with no scheme raises a ValueError in from_env()."""
+    monkeypatch.setenv("ASSAY_BASE_URL", "localhost:3000")
+    with pytest.raises(ValueError, match="ASSAY_BASE_URL"):
         Config.from_env()
 
 
 def test_valid_base_url_accepted(monkeypatch):
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
     cfg = Config.from_env()
     assert cfg.app_url == "http://localhost:3000"
 
 
 def test_login_url_defaults_to_application_url(monkeypatch):
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
-    monkeypatch.delenv("BTA_LOGIN_URL", raising=False)
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
+    monkeypatch.delenv("ASSAY_LOGIN_URL", raising=False)
     assert Config.from_env().login_url == "http://localhost:3000"
 
 
 def test_invalid_login_url_raises(monkeypatch):
-    monkeypatch.setenv("BTA_LOGIN_URL", "not-a-url")
-    with pytest.raises(ValueError, match="BTA_LOGIN_URL"):
+    monkeypatch.setenv("ASSAY_LOGIN_URL", "not-a-url")
+    with pytest.raises(ValueError, match="ASSAY_LOGIN_URL"):
         Config.from_env()
 
 
 def test_invalid_origin_raises(monkeypatch):
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
-    monkeypatch.setenv("BTA_ALLOWED_ORIGINS", "http://ok.example.com,not-an-origin")
-    with pytest.raises(ValueError, match="BTA_ALLOWED_ORIGINS"):
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("ASSAY_ALLOWED_ORIGINS", "http://ok.example.com,not-an-origin")
+    with pytest.raises(ValueError, match="ASSAY_ALLOWED_ORIGINS"):
         Config.from_env()
 
 
 def test_origin_with_path_raises(monkeypatch):
     """Origins must not include a path component."""
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
-    monkeypatch.setenv("BTA_ALLOWED_ORIGINS", "http://localhost:3000/app")
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("ASSAY_ALLOWED_ORIGINS", "http://localhost:3000/app")
     with pytest.raises(ValueError, match="no path"):
         Config.from_env()
 
 
 def test_allowed_origins_defaults_to_base_url_origin(monkeypatch):
-    """When BTA_ALLOWED_ORIGINS is unset, allowed_origins derives from BTA_BASE_URL."""
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
-    monkeypatch.delenv("BTA_ALLOWED_ORIGINS", raising=False)
+    """When ASSAY_ALLOWED_ORIGINS is unset, allowed_origins derives from ASSAY_BASE_URL."""
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
+    monkeypatch.delenv("ASSAY_ALLOWED_ORIGINS", raising=False)
     cfg = Config.from_env()
     assert cfg.allowed_origins == ["http://localhost:3000"]
 
 
 def test_allowed_origins_empty_when_no_base_url(monkeypatch):
-    monkeypatch.delenv("BTA_BASE_URL", raising=False)
-    monkeypatch.delenv("BTA_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.delenv("ASSAY_BASE_URL", raising=False)
+    monkeypatch.delenv("ASSAY_ALLOWED_ORIGINS", raising=False)
     cfg = Config.from_env()
     assert cfg.allowed_origins == []
 
@@ -123,33 +123,33 @@ def test_allowed_origins_empty_when_no_base_url(monkeypatch):
 # ── Credential pairing ────────────────────────────────────────────────────────
 
 def test_username_without_password_rejected(monkeypatch):
-    monkeypatch.setenv("BTA_TEST_USERNAME", "user@example.com")
-    monkeypatch.delenv("BTA_TEST_PASSWORD", raising=False)
+    monkeypatch.setenv("ASSAY_TEST_USERNAME", "user@example.com")
+    monkeypatch.delenv("ASSAY_TEST_PASSWORD", raising=False)
     cfg = Config.from_env()
     with pytest.raises(ValueError, match="both be set or both be unset"):
         cfg.validate_for_check()
 
 
 def test_password_without_username_rejected(monkeypatch):
-    monkeypatch.delenv("BTA_TEST_USERNAME", raising=False)
-    monkeypatch.setenv("BTA_TEST_PASSWORD", "secret")
+    monkeypatch.delenv("ASSAY_TEST_USERNAME", raising=False)
+    monkeypatch.setenv("ASSAY_TEST_PASSWORD", "secret")
     cfg = Config.from_env()
     with pytest.raises(ValueError, match="both be set or both be unset"):
         cfg.validate_for_check()
 
 
 def test_both_credentials_accepted(monkeypatch):
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
-    monkeypatch.setenv("BTA_TEST_USERNAME", "user@example.com")
-    monkeypatch.setenv("BTA_TEST_PASSWORD", "secret")
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("ASSAY_TEST_USERNAME", "user@example.com")
+    monkeypatch.setenv("ASSAY_TEST_PASSWORD", "secret")
     cfg = Config.from_env()
     cfg.validate_for_check()  # must not raise
 
 
 def test_no_credentials_accepted(monkeypatch):
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
-    monkeypatch.delenv("BTA_TEST_USERNAME", raising=False)
-    monkeypatch.delenv("BTA_TEST_PASSWORD", raising=False)
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
+    monkeypatch.delenv("ASSAY_TEST_USERNAME", raising=False)
+    monkeypatch.delenv("ASSAY_TEST_PASSWORD", raising=False)
     cfg = Config.from_env()
     cfg.validate_for_check()  # must not raise
 
@@ -157,56 +157,56 @@ def test_no_credentials_accepted(monkeypatch):
 # ── Missing required inputs ───────────────────────────────────────────────────
 
 def test_missing_base_url_fails_validate_for_check(monkeypatch):
-    monkeypatch.delenv("BTA_BASE_URL", raising=False)
+    monkeypatch.delenv("ASSAY_BASE_URL", raising=False)
     cfg = Config.from_env()
-    with pytest.raises(ValueError, match="BTA_BASE_URL is required"):
+    with pytest.raises(ValueError, match="ASSAY_BASE_URL is required"):
         cfg.validate_for_check()
 
 
 def test_multiple_errors_reported_together(monkeypatch):
     """validate_for_check collects all errors before raising."""
-    monkeypatch.delenv("BTA_BASE_URL", raising=False)
-    monkeypatch.setenv("BTA_TEST_USERNAME", "user@example.com")
-    monkeypatch.delenv("BTA_TEST_PASSWORD", raising=False)
+    monkeypatch.delenv("ASSAY_BASE_URL", raising=False)
+    monkeypatch.setenv("ASSAY_TEST_USERNAME", "user@example.com")
+    monkeypatch.delenv("ASSAY_TEST_PASSWORD", raising=False)
     cfg = Config.from_env()
     with pytest.raises(ValueError) as exc_info:
         cfg.validate_for_check()
     msg = str(exc_info.value)
-    assert "BTA_BASE_URL" in msg
-    assert "BTA_TEST_USERNAME" in msg or "both be set" in msg
+    assert "ASSAY_BASE_URL" in msg
+    assert "ASSAY_TEST_USERNAME" in msg or "both be set" in msg
 
 
 # ── File existence checks ─────────────────────────────────────────────────────
 
 def test_missing_auth_notes_file_fails_check(tmp_path, monkeypatch):
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
-    monkeypatch.setenv("BTA_AUTH_NOTES_FILE", str(tmp_path / "nonexistent.md"))
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("ASSAY_AUTH_NOTES_FILE", str(tmp_path / "nonexistent.md"))
     cfg = Config.from_env()
-    with pytest.raises(ValueError, match="BTA_AUTH_NOTES_FILE"):
+    with pytest.raises(ValueError, match="ASSAY_AUTH_NOTES_FILE"):
         cfg.validate_for_check()
 
 
 def test_missing_test_data_file_fails_check(tmp_path, monkeypatch):
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
-    monkeypatch.setenv("BTA_TEST_DATA_FILE", str(tmp_path / "nonexistent.md"))
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("ASSAY_TEST_DATA_FILE", str(tmp_path / "nonexistent.md"))
     cfg = Config.from_env()
-    with pytest.raises(ValueError, match="BTA_TEST_DATA_FILE"):
+    with pytest.raises(ValueError, match="ASSAY_TEST_DATA_FILE"):
         cfg.validate_for_check()
 
 
 def test_existing_notes_file_accepted(tmp_path, monkeypatch):
     notes = tmp_path / "notes.md"
     notes.write_text("# Test notes\n")
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
-    monkeypatch.setenv("BTA_AUTH_NOTES_FILE", str(notes))
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("ASSAY_AUTH_NOTES_FILE", str(notes))
     cfg = Config.from_env()
     cfg.validate_for_check()  # must not raise
 
 
 def test_auth_state_no_existence_check(tmp_path, monkeypatch):
-    """BTA_AUTH_STATE is allowed to not exist yet (created on first login run)."""
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
-    monkeypatch.setenv("BTA_AUTH_STATE", str(tmp_path / "no-such-state.json"))
+    """ASSAY_AUTH_STATE is allowed to not exist yet (created on first login run)."""
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("ASSAY_AUTH_STATE", str(tmp_path / "no-such-state.json"))
     cfg = Config.from_env()
     cfg.validate_for_check()  # must not raise
 
@@ -214,27 +214,27 @@ def test_auth_state_no_existence_check(tmp_path, monkeypatch):
 # ── Budget limit validation ───────────────────────────────────────────────────
 
 def test_negative_max_actions_raises(monkeypatch):
-    monkeypatch.setenv("BTA_MAX_ACTIONS", "-5")
-    with pytest.raises(ValueError, match="BTA_MAX_ACTIONS"):
+    monkeypatch.setenv("ASSAY_MAX_ACTIONS", "-5")
+    with pytest.raises(ValueError, match="ASSAY_MAX_ACTIONS"):
         Config.from_env()
 
 
 def test_zero_max_seconds_raises(monkeypatch):
-    monkeypatch.setenv("BTA_MAX_SECONDS", "0")
-    with pytest.raises(ValueError, match="BTA_MAX_SECONDS"):
+    monkeypatch.setenv("ASSAY_MAX_SECONDS", "0")
+    with pytest.raises(ValueError, match="ASSAY_MAX_SECONDS"):
         Config.from_env()
 
 
 def test_non_numeric_max_actions_raises(monkeypatch):
-    monkeypatch.setenv("BTA_MAX_ACTIONS", "lots")
-    with pytest.raises(ValueError, match="BTA_MAX_ACTIONS"):
+    monkeypatch.setenv("ASSAY_MAX_ACTIONS", "lots")
+    with pytest.raises(ValueError, match="ASSAY_MAX_ACTIONS"):
         Config.from_env()
 
 
 def test_positive_limits_accepted(monkeypatch):
-    monkeypatch.setenv("BTA_MAX_SECONDS", "600")
-    monkeypatch.setenv("BTA_MAX_ACTIONS", "100")
-    monkeypatch.setenv("BTA_MAX_COST_USD", "1.50")
+    monkeypatch.setenv("ASSAY_MAX_SECONDS", "600")
+    monkeypatch.setenv("ASSAY_MAX_ACTIONS", "100")
+    monkeypatch.setenv("ASSAY_MAX_COST_USD", "1.50")
     cfg = Config.from_env()
     assert cfg.max_seconds == 600
     assert cfg.max_actions == 100
@@ -242,22 +242,22 @@ def test_positive_limits_accepted(monkeypatch):
 
 
 def test_negative_cost_raises(monkeypatch):
-    monkeypatch.setenv("BTA_MAX_COST_USD", "-0.5")
-    with pytest.raises(ValueError, match="BTA_MAX_COST_USD"):
+    monkeypatch.setenv("ASSAY_MAX_COST_USD", "-0.5")
+    with pytest.raises(ValueError, match="ASSAY_MAX_COST_USD"):
         Config.from_env()
 
 
 # ── Depth validation ──────────────────────────────────────────────────────────
 
 def test_invalid_depth_raises(monkeypatch):
-    monkeypatch.setenv("BTA_DEPTH", "extreme")
-    with pytest.raises(ValueError, match="BTA_DEPTH"):
+    monkeypatch.setenv("ASSAY_DEPTH", "extreme")
+    with pytest.raises(ValueError, match="ASSAY_DEPTH"):
         Config.from_env()
 
 
 @pytest.mark.parametrize("depth", ["low", "medium", "high"])
 def test_valid_depths_accepted(depth, monkeypatch):
-    monkeypatch.setenv("BTA_DEPTH", depth)
+    monkeypatch.setenv("ASSAY_DEPTH", depth)
     cfg = Config.from_env()
     assert cfg.depth == depth
 
@@ -265,24 +265,24 @@ def test_valid_depths_accepted(depth, monkeypatch):
 # ── Boolean validation ────────────────────────────────────────────────────────
 
 def test_invalid_allow_mutations_raises(monkeypatch):
-    monkeypatch.setenv("BTA_ALLOW_MUTATIONS", "maybe")
-    with pytest.raises(ValueError, match="BTA_ALLOW_MUTATIONS"):
+    monkeypatch.setenv("ASSAY_ALLOW_MUTATIONS", "maybe")
+    with pytest.raises(ValueError, match="ASSAY_ALLOW_MUTATIONS"):
         Config.from_env()
 
 
 def test_invalid_headless_raises(monkeypatch):
-    monkeypatch.setenv("BTA_HEADLESS", "sometimes")
-    with pytest.raises(ValueError, match="BTA_HEADLESS"):
+    monkeypatch.setenv("ASSAY_HEADLESS", "sometimes")
+    with pytest.raises(ValueError, match="ASSAY_HEADLESS"):
         Config.from_env()
 
 
 def test_invalid_show_evidence_raises(monkeypatch):
-    monkeypatch.setenv("BTA_SHOW_EVIDENCE", "sometimes")
-    with pytest.raises(ValueError, match="BTA_SHOW_EVIDENCE"):
+    monkeypatch.setenv("ASSAY_SHOW_EVIDENCE", "sometimes")
+    with pytest.raises(ValueError, match="ASSAY_SHOW_EVIDENCE"):
         Config.from_env()
 
 
-@pytest.mark.parametrize("name", ["BTA_NAV_TIMEOUT_MS", "BTA_ACTION_TIMEOUT_MS"])
+@pytest.mark.parametrize("name", ["ASSAY_NAV_TIMEOUT_MS", "ASSAY_ACTION_TIMEOUT_MS"])
 def test_browser_timeout_must_be_positive(name, monkeypatch):
     monkeypatch.setenv(name, "0")
     with pytest.raises(ValueError, match=name):
@@ -290,27 +290,27 @@ def test_browser_timeout_must_be_positive(name, monkeypatch):
 
 
 def test_slowmo_must_not_be_negative(monkeypatch):
-    monkeypatch.setenv("BTA_SLOWMO_MS", "-1")
-    with pytest.raises(ValueError, match="BTA_SLOWMO_MS"):
+    monkeypatch.setenv("ASSAY_SLOWMO_MS", "-1")
+    with pytest.raises(ValueError, match="ASSAY_SLOWMO_MS"):
         Config.from_env()
 
 
 def test_allow_mutations_true(monkeypatch):
-    monkeypatch.setenv("BTA_ALLOW_MUTATIONS", "true")
+    monkeypatch.setenv("ASSAY_ALLOW_MUTATIONS", "true")
     assert Config.from_env().allow_mutations is True
 
 
 def test_allow_mutations_defaults_false(monkeypatch):
-    monkeypatch.delenv("BTA_ALLOW_MUTATIONS", raising=False)
+    monkeypatch.delenv("ASSAY_ALLOW_MUTATIONS", raising=False)
     assert Config.from_env().allow_mutations is False
 
 
 # ── Gateway / application URL separation ─────────────────────────────────────
 
 def test_gateway_base_url_not_overwritten_by_app_url(monkeypatch):
-    """ANTHROPIC_BASE_URL (gateway) must be preserved when BTA_BASE_URL is also set."""
+    """ANTHROPIC_BASE_URL (gateway) must be preserved when ASSAY_BASE_URL is also set."""
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://gateway.example.com/api")
-    monkeypatch.setenv("BTA_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://localhost:3000")
     cfg = Config.from_env()
     assert cfg.base_url == "https://gateway.example.com/api"
     assert cfg.app_url == "http://localhost:3000"

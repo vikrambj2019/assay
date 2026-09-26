@@ -1,4 +1,4 @@
-"""Sequential scenario executor for `bta check` runs.
+"""Sequential scenario executor for `assay check` runs.
 
 Runs each scenario in the plan in topological (dependency) order.
 For each scenario:
