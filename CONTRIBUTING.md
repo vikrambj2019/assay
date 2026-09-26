@@ -34,7 +34,7 @@ browser deps must not be silently hidden.
 
 ## Five-minute fixture demo
 
-Run `bta check --plan-only` against a synthetic fixture app to see plan
+Run `assay check --plan-only` against a synthetic fixture app to see plan
 generation without executing browser scenarios (no credentials needed beyond
 an Anthropic API key):
 
@@ -49,7 +49,7 @@ flask --app fixture.app.factory:create_app run --port 5173 &
 echo "# Changes\n- Added record creation form with name/qty/price fields" > demo-notes.md
 
 # 4. Run plan-only (plans but does not execute — no browser mutations)
-bta check --notes demo-notes.md --depth low --url http://localhost:5173 --plan-only
+assay check --notes demo-notes.md --depth low --url http://localhost:5173 --plan-only
 ```
 
 This writes `results/check/plan.json` without opening a browser.
@@ -120,6 +120,6 @@ pytest tests/test_plan.py tests/test_planner.py tests/test_auth_policy.py \
        tests/test_fixture_ground_truth.py -q
 
 # CLI help must work without credentials
-bta --help
-bta check --help
+assay --help
+assay check --help
 ```

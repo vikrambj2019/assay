@@ -44,10 +44,10 @@ def _spec(**kwargs) -> TestSpec:
 
 # Built-in defaults (nothing set anywhere)
 def test_builtin_defaults_applied(monkeypatch) -> None:
-    monkeypatch.delenv("BTA_MODEL", raising=False)
-    monkeypatch.delenv("BTA_EFFORT", raising=False)
-    monkeypatch.delenv("BTA_HEADLESS", raising=False)
-    monkeypatch.delenv("BTA_SLOWMO_MS", raising=False)
+    monkeypatch.delenv("ASSAY_MODEL", raising=False)
+    monkeypatch.delenv("ASSAY_EFFORT", raising=False)
+    monkeypatch.delenv("ASSAY_HEADLESS", raising=False)
+    monkeypatch.delenv("ASSAY_SLOWMO_MS", raising=False)
 
     cfg = _resolve_test_config(_spec(), _base_cfg())
 
@@ -59,10 +59,10 @@ def test_builtin_defaults_applied(monkeypatch) -> None:
 
 # Env vars override built-ins
 @pytest.mark.parametrize("field,env_name,env_val,attr,expected", [
-    ("model",     "BTA_MODEL",   "claude-haiku-4",  "model",      "claude-haiku-4"),
-    ("effort",    "BTA_EFFORT",  "low",             "effort",     "low"),
-    ("headless",  "BTA_HEADLESS","false",           "headless",   False),
-    ("slowmo_ms", "BTA_SLOWMO_MS","250",            "slow_mo_ms", 250),
+    ("model",     "ASSAY_MODEL",   "claude-haiku-4",  "model",      "claude-haiku-4"),
+    ("effort",    "ASSAY_EFFORT",  "low",             "effort",     "low"),
+    ("headless",  "ASSAY_HEADLESS","false",           "headless",   False),
+    ("slowmo_ms", "ASSAY_SLOWMO_MS","250",            "slow_mo_ms", 250),
 ])
 def test_env_var_overrides_builtin(monkeypatch, field, env_name, env_val, attr, expected) -> None:
     monkeypatch.setenv(env_name, env_val)
@@ -72,8 +72,8 @@ def test_env_var_overrides_builtin(monkeypatch, field, env_name, env_val, attr, 
 
 # YAML defaults override env vars (simulated by loading a suite with defaults only)
 def test_yaml_defaults_override_env(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("BTA_MODEL", "env-model")
-    monkeypatch.setenv("BTA_EFFORT", "low")
+    monkeypatch.setenv("ASSAY_MODEL", "env-model")
+    monkeypatch.setenv("ASSAY_EFFORT", "low")
 
     p = tmp_path / "suite.yaml"
     p.write_text(yaml.dump({
@@ -105,7 +105,7 @@ def test_per_test_yaml_overrides_defaults(tmp_path: Path) -> None:
 
 # Full precedence stack: builtin < env < defaults < explicit test
 def test_full_precedence_stack(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("BTA_SLOWMO_MS", "100")  # env
+    monkeypatch.setenv("ASSAY_SLOWMO_MS", "100")  # env
 
     p = tmp_path / "suite.yaml"
     p.write_text(yaml.dump({
@@ -126,7 +126,7 @@ def test_full_precedence_stack(tmp_path: Path, monkeypatch) -> None:
 
 # headless precedence
 def test_headless_precedence(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("BTA_HEADLESS", "false")  # env says non-headless
+    monkeypatch.setenv("ASSAY_HEADLESS", "false")  # env says non-headless
 
     p = tmp_path / "suite.yaml"
     p.write_text(yaml.dump({
@@ -201,7 +201,7 @@ def test_gateway_base_url_not_affected_by_application_base_url(
 # ---------------------------------------------------------------------------
 
 def test_unset_yaml_model_falls_through_to_env(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("BTA_MODEL", "env-model-xyz")
+    monkeypatch.setenv("ASSAY_MODEL", "env-model-xyz")
 
     p = tmp_path / "suite.yaml"
     p.write_text(yaml.dump({
@@ -224,12 +224,12 @@ def test_results_root_comes_from_cfg_base(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# R5: BTA_BASE_URL env var is used for {base_url} interpolation when no YAML url
+# R5: ASSAY_BASE_URL env var is used for {base_url} interpolation when no YAML url
 # ---------------------------------------------------------------------------
 
 def test_env_base_url_used_in_goal_when_no_yaml_base_url(
         tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("BTA_BASE_URL", "http://fixture.local")
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://fixture.local")
 
     p = tmp_path / "suite.yaml"
     p.write_text(yaml.dump({
@@ -242,7 +242,7 @@ def test_env_base_url_used_in_goal_when_no_yaml_base_url(
 
 def test_env_base_url_overridden_by_yaml_suite_default(
         tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("BTA_BASE_URL", "http://env.local")
+    monkeypatch.setenv("ASSAY_BASE_URL", "http://env.local")
 
     p = tmp_path / "suite.yaml"
     p.write_text(yaml.dump({

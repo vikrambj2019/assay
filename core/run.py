@@ -1,4 +1,4 @@
-"""Sequential scenario execution skeleton for `bta check` runs.
+"""Sequential scenario execution skeleton for `assay check` runs.
 
 Provides:
 - ``generate_run_id``         — collision-resistant run identifier included in

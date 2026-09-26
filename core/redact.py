@@ -21,8 +21,8 @@ _PLACEHOLDER = "[REDACTED]"
 _CREDENTIAL_VARS = (
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
-    "BTA_TEST_PASSWORD",
-    "BTA_TEST_USERNAME",
+    "ASSAY_TEST_PASSWORD",
+    "ASSAY_TEST_USERNAME",
 )
 
 
@@ -53,7 +53,7 @@ class Redactor:
 def make_redactor() -> "Redactor":
     """Build a Redactor from the current process environment.
 
-    Reads ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, BTA_TEST_PASSWORD, and
-    BTA_TEST_USERNAME. Only non-empty values are registered as secrets.
+    Reads ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ASSAY_TEST_PASSWORD, and
+    ASSAY_TEST_USERNAME. Only non-empty values are registered as secrets.
     """
     return Redactor([os.environ.get(v, "") for v in _CREDENTIAL_VARS])

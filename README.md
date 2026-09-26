@@ -1,4 +1,4 @@
-# bta — Natural-Language Browser Testing Agent
+# assay — Natural-Language Browser Testing Agent
 
 Write a goal in plain English; the agent executes it against a running web
 app and returns a **trustworthy per-stage verdict and evidence report**.
@@ -21,7 +21,7 @@ form can accept invalid input, or a login redirect can lead to a dead page.
 Those failures are difficult to cover from a code diff alone because the
 expected behavior is spread across the change notes, README, and running app.
 
-`bta` turns that information into a bounded browser test run before a pull
+`assay` turns that information into a bounded browser test run before a pull
 request is submitted. It reads the notes and optional README/diff, proposes
 scenarios and observable assertions, executes them in Chromium, and writes
 evidence-backed PASS, FAIL, BLOCKED, ERROR, or UNVERIFIED results. It is an
@@ -70,8 +70,8 @@ and harness remain the source of truth.
 
 ```bash
 pip install -e ".[dev]" flask
-bta --help
-bta check --help
+assay --help
+assay check --help
 ```
 
 No browser or API key is needed for unit tests:
@@ -83,13 +83,13 @@ pytest tests/test_plan.py tests/test_executor.py tests/test_budget.py \
 
 ---
 
-## `bta check` — pre-PR browser check
+## `assay check` — pre-PR browser check
 
 One command reads your changes, generates a bounded test plan, executes it in
 Chromium, and writes evidence-backed results:
 
 ```bash
-bta check \
+assay check \
   --notes changes.md \
   --readme README.md \
   --diff main \
@@ -114,7 +114,7 @@ EOF
 cp .env.example .env
 
 # 4. Generate and execute a bounded browser plan.
-bta check --notes changes.md --readme README.md --diff main --depth medium
+assay check --notes changes.md --readme README.md --diff main --depth medium
 ```
 
 Use `--plan-only` when you want to review the generated scenarios before any
@@ -135,23 +135,23 @@ always wins over `.env`; CLI arguments win over both.
 ```
 ANTHROPIC_API_KEY=sk-ant-...        # required for planning and execution
 
-BTA_BASE_URL=http://localhost:3000  # required: URL of the running app
-# BTA_LOGIN_URL=http://localhost:3000/login   # optional, defaults to BTA_BASE_URL
+ASSAY_BASE_URL=http://localhost:3000  # required: URL of the running app
+# ASSAY_LOGIN_URL=http://localhost:3000/login   # optional, defaults to ASSAY_BASE_URL
 
 # Optional test credentials (supply both or neither)
-# BTA_TEST_USERNAME=testuser@example.com
-# BTA_TEST_PASSWORD=changeme
+# ASSAY_TEST_USERNAME=testuser@example.com
+# ASSAY_TEST_PASSWORD=changeme
 
 # Optional: path to a Playwright storage-state file (bypasses login)
-# BTA_AUTH_STATE=./auth-state.json
+# ASSAY_AUTH_STATE=./auth-state.json
 
 # Depth: low | medium | high (default: medium)
-# BTA_DEPTH=medium
+# ASSAY_DEPTH=medium
 
 # Budget overrides (defaults come from depth preset)
-# BTA_MAX_SECONDS=600
-# BTA_MAX_ACTIONS=100
-# BTA_MAX_COST_USD=1.00
+# ASSAY_MAX_SECONDS=600
+# ASSAY_MAX_ACTIONS=100
+# ASSAY_MAX_COST_USD=1.00
 ```
 
 Do not commit `.env` — it contains credentials. The file is listed in `.gitignore`.
@@ -165,15 +165,15 @@ Do not commit `.env` — it contains credentials. The file is listed in `.gitign
 | high   | 15 | 200 | 1 200 | Medium plus boundary cases and selected repeatability checks |
 
 Override any limit with `--max-seconds`, `--max-actions`, or `--max-cost-usd`.
-Depth does not change `BTA_EFFORT`.
+Depth does not change `ASSAY_EFFORT`.
 
 ### Supported auth modes
 
 | Mode | How to activate | What the harness does |
 |---|---|---|
 | None | No credentials or state file | Runs unauthenticated |
-| Storage state | `BTA_AUTH_STATE=./auth-state.json` | Loads Playwright cookies/localStorage; bypasses login form |
-| Credentials | `BTA_TEST_USERNAME` + `BTA_TEST_PASSWORD` | Performs a credential login using the login URL |
+| Storage state | `ASSAY_AUTH_STATE=./auth-state.json` | Loads Playwright cookies/localStorage; bypasses login form |
+| Credentials | `ASSAY_TEST_USERNAME` + `ASSAY_TEST_PASSWORD` | Performs a credential login using the login URL |
 
 Unsupported MFA or CAPTCHA becomes `BLOCKED`, not `PASS`. Uncertain login state
 becomes `UNVERIFIED`. Neither ever silently passes.
@@ -210,7 +210,7 @@ Empty plans and budget-exhausted runs always exit non-zero.
 
 ### Cost limitations
 
-`BTA_MAX_COST_USD` enforces a cost threshold at SDK-reported usage boundaries.
+`ASSAY_MAX_COST_USD` enforces a cost threshold at SDK-reported usage boundaries.
 SDK usage reporting may be batched — a single large model call can push the
 total above the threshold before the next check. This is disclosed in the
 `reason` field of any UNVERIFIED scenario caused by the cost limit, and in the
@@ -267,7 +267,7 @@ cp .env.example .env
 flask --app fixture.app.factory:create_app run --port 5173 &
 
 # 3. Run plan-only (no browser mutations, verifies planning works)
-bta check --notes CONTRIBUTING.md --depth low \
+assay check --notes CONTRIBUTING.md --depth low \
           --url http://localhost:5173 --plan-only
 
 # 4. View the generated plan
@@ -339,9 +339,9 @@ core/               # browser substrate — no agent, no LLM
 ├── run.py          # ScenarioResult / execution_order / pre_check_scenario
 ├── context.py      # collect_context: notes + README + git diff (secret-scrubbed)
 ├── redact.py       # Redactor: masks credentials in all text artifacts
-├── config.py       # Config: BTA_* env vars with validation
+├── config.py       # Config: ASSAY_* env vars with validation
 ├── browser.py      # BrowserSession + passive evidence capture (console + network)
-├── actions.py      # typed Playwright actions by data-bta-index
+├── actions.py      # typed Playwright actions by data-assay-index
 ├── settle.py       # network-idle + DOM-quiet settlement detector
 ├── snapshot/       # DOM → indexed text (dom_walk.js · capture · render)
 ├── suite.py        # YAML suite runner: parse → needs-graph → concurrent run_goal
@@ -349,7 +349,7 @@ core/               # browser substrate — no agent, no LLM
 └── report.py       # HTML evidence report for agent suite runs
 
 harness/            # thinking layer — Claude Agent SDK (imports core only)
-├── cli.py          # bta / agent entrypoint: suite + check subcommands
+├── cli.py          # assay / agent entrypoint: suite + check subcommands
 ├── tools.py        # browser actions as MCP tools with origin policy
 ├── agent.py        # Claude Agent SDK loop + live transcript + run_goal
 ├── page.py         # PostToolUse hook: settle → render → deliver live page
@@ -381,7 +381,7 @@ The image includes Playwright Chromium + Node.js + the Claude Code CLI:
 ```bash
 docker compose build
 cp .env.example .env
-# (fill in ANTHROPIC_API_KEY and BTA_BASE_URL)
+# (fill in ANTHROPIC_API_KEY and ASSAY_BASE_URL)
 docker compose run --rm agent suite suites/fixture-demo.yaml
 docker compose run --rm --entrypoint pytest agent -q
 ```
@@ -397,11 +397,11 @@ docker compose run --rm --entrypoint pytest agent -q
 
 - Never commit `.env`. It is listed in `.gitignore`.
 - Auth-state files (`*.session.json`) are gitignored and excluded from all artifacts.
-- The origin policy (`BTA_ALLOWED_ORIGINS`) blocks top-level navigations to
+- The origin policy (`ASSAY_ALLOWED_ORIGINS`) blocks top-level navigations to
   unlisted origins, including redirects and popups. CDN subresources are always
   allowed. This is a tool-level policy; it is not a server-side guarantee.
 - Mutation scenarios (`requires_mutations: true`) are blocked by default
-  (`BTA_ALLOW_MUTATIONS=false`). This blocks planned create/edit/delete operations
+  (`ASSAY_ALLOW_MUTATIONS=false`). This blocks planned create/edit/delete operations
   at the agent tool level; it is not a guarantee the server is read-only.
 - Fork CI workflows cannot access repository secrets (GitHub Actions default).
   Live-model evaluation requires `workflow_dispatch` from a trusted committer.

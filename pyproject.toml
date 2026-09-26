@@ -3,8 +3,8 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bta"
-version = "0.0.0"
+name = "assay"
+version = "0.1.0"
 description = "Natural-language browser testing agent"
 # 3.10 to match the official Playwright jammy image (Ubuntu 22.04 ships Python
 # 3.10). Code stays 3.10-safe via `from __future__ import annotations`. The
@@ -32,7 +32,7 @@ dev = [
 
 [project.scripts]
 agent = "harness.cli:main"
-bta   = "harness.cli:main"
+assay = "harness.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["core*", "harness*", "fixture*"]

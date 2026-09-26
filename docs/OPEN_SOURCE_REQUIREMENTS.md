@@ -7,12 +7,12 @@ Status: proposed requirements, not implemented behavior.
 A developer configures a running test application once in `.env`, then runs:
 
 ```sh
-bta check --notes changes.md --readme README.md --diff main --depth medium
+assay check --notes changes.md --readme README.md --diff main --depth medium
 ```
 
 The tool reads the supplied context, creates a bounded test plan, executes it in Chromium, and reports evidence-backed results and coverage gaps. It does not claim exhaustive coverage. The first release is an advisory pre-PR check.
 
-Keep `agent suite <file>` working. Add `bta` as an alias entry point. Do not replace the browser engine or change model providers as part of this work.
+Keep `agent suite <file>` working. Add `assay` as an alias entry point. Do not replace the browser engine or change model providers as part of this work.
 
 Initial scope: a running app, one configured user, Chromium, local execution and Docker, HTML/JSON/JUnit artifacts. App startup, automatic PR posting, cross-browser testing, multiple roles, automatic code fixes, and generated permanent Playwright tests are deferred.
 
@@ -37,26 +37,26 @@ One-time `.env` keys:
 | Key | Meaning |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Existing model credential |
-| `BTA_MODEL`, `BTA_EFFORT` | Existing provider model and reasoning settings |
-| `BTA_BASE_URL` | Running test app URL; required for `check` |
-| `BTA_LOGIN_URL` | Optional login URL, defaults to base URL when credentials are supplied |
-| `BTA_TEST_USERNAME`, `BTA_TEST_PASSWORD` | Optional test credentials; supply both or neither |
-| `BTA_AUTH_STATE` | Optional path to Playwright storage state; bypasses credential login when supplied |
-| `BTA_AUTH_NOTES_FILE` | Optional local Markdown describing login and authenticated-state checks |
-| `BTA_TEST_DATA_FILE` | Optional local synthetic fixture data/instructions |
-| `BTA_ALLOWED_ORIGINS` | Comma-separated browser origins; defaults to base URL origin |
-| `BTA_ALLOW_MUTATIONS` | `false` by default; whether test record creation/edit/deletion is allowed |
-| `BTA_DEPTH` | `low`, `medium`, or `high`; default `medium` |
-| `BTA_MAX_SECONDS` | Optional override of the depth time budget |
-| `BTA_MAX_ACTIONS` | Optional override of the depth action budget |
-| `BTA_MAX_COST_USD` | Optional positive cost threshold, subject to SDK reporting granularity |
-| `BTA_RESULTS_DIR` | Existing output directory setting |
+| `ASSAY_MODEL`, `ASSAY_EFFORT` | Existing provider model and reasoning settings |
+| `ASSAY_BASE_URL` | Running test app URL; required for `check` |
+| `ASSAY_LOGIN_URL` | Optional login URL, defaults to base URL when credentials are supplied |
+| `ASSAY_TEST_USERNAME`, `ASSAY_TEST_PASSWORD` | Optional test credentials; supply both or neither |
+| `ASSAY_AUTH_STATE` | Optional path to Playwright storage state; bypasses credential login when supplied |
+| `ASSAY_AUTH_NOTES_FILE` | Optional local Markdown describing login and authenticated-state checks |
+| `ASSAY_TEST_DATA_FILE` | Optional local synthetic fixture data/instructions |
+| `ASSAY_ALLOWED_ORIGINS` | Comma-separated browser origins; defaults to base URL origin |
+| `ASSAY_ALLOW_MUTATIONS` | `false` by default; whether test record creation/edit/deletion is allowed |
+| `ASSAY_DEPTH` | `low`, `medium`, or `high`; default `medium` |
+| `ASSAY_MAX_SECONDS` | Optional override of the depth time budget |
+| `ASSAY_MAX_ACTIONS` | Optional override of the depth action budget |
+| `ASSAY_MAX_COST_USD` | Optional positive cost threshold, subject to SDK reporting granularity |
+| `ASSAY_RESULTS_DIR` | Existing output directory setting |
 
-Keep existing gateway environment variables. `BTA_BASE_URL` is the application URL; it must not overwrite `ANTHROPIC_BASE_URL`, the model gateway URL. Store paths and simple values in `.env`, not arbitrary shell commands. Fixture files may contain structured test data and instructions; executable fixture/reset hooks are deferred.
+Keep existing gateway environment variables. `ASSAY_BASE_URL` is the application URL; it must not overwrite `ANTHROPIC_BASE_URL`, the model gateway URL. Store paths and simple values in `.env`, not arbitrary shell commands. Fixture files may contain structured test data and instructions; executable fixture/reset hooks are deferred.
 
 ### Depth presets
 
-These are initial configurable budgets, not performance guarantees. Depth does not change `BTA_EFFORT`.
+These are initial configurable budgets, not performance guarantees. Depth does not change `ASSAY_EFFORT`.
 
 | Depth | Max scenarios | Max actions across the run | Max seconds across the run | Coverage emphasis |
 | --- | ---: | ---: | ---: | --- |
@@ -170,7 +170,7 @@ Scope: configuration, `.env.example`, Docker Compose.
 
 Acceptance: temporary `.env` fixtures test process-env precedence, missing URL, partial credentials, invalid limits, bad origins, missing files, and gateway coexistence. `--help` requires no secrets or application.
 
-### 09. Add `bta check` and safe context collection
+### 09. Add `assay check` and safe context collection
 
 Scope: CLI plus a new context-loading module.
 

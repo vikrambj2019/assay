@@ -12,11 +12,11 @@ dist/
 .venv/
 venv/
 # Saved browser session (auth cookies + storage) — remembers a login across runs
-.bta_session.json
+.assay_session.json
 *.session.json
 # Playwright auth-state files (contain live cookies/localStorage)
 auth-state.json
-bta-auth-state.json
+assay-auth-state.json
 *-auth-state.json
 
 # Run output (evidence reports, screenshots, logs)

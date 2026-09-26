@@ -189,7 +189,7 @@ def test_null_goal_rejected(tmp_path: Path) -> None:
 
 async def test_failing_worker_does_not_lose_passing_worker(
         tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("BTA_RESULTS_DIR", str(tmp_path / "results"))
+    monkeypatch.setenv("ASSAY_RESULTS_DIR", str(tmp_path / "results"))
     suite = _write_suite(tmp_path, [
         {"name": "good", "goal": "do good"},
         {"name": "bad",  "goal": "do bad"},
@@ -218,7 +218,7 @@ async def test_failing_worker_does_not_lose_passing_worker(
 
 async def test_dependent_blocked_when_upstream_fails(
         tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("BTA_RESULTS_DIR", str(tmp_path / "results"))
+    monkeypatch.setenv("ASSAY_RESULTS_DIR", str(tmp_path / "results"))
     suite = _write_suite(tmp_path, [
         {"name": "login",     "goal": "log in"},
         {"name": "dashboard", "goal": "check dash", "needs": ["login"]},
@@ -243,7 +243,7 @@ async def test_dependent_blocked_when_upstream_fails(
 
 async def test_crash_becomes_error_and_blocks_dependents(
         tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("BTA_RESULTS_DIR", str(tmp_path / "results"))
+    monkeypatch.setenv("ASSAY_RESULTS_DIR", str(tmp_path / "results"))
     suite = _write_suite(tmp_path, [
         {"name": "login",     "goal": "log in"},
         {"name": "dashboard", "goal": "check dash", "needs": ["login"]},

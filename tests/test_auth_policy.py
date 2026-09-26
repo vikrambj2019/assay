@@ -172,7 +172,7 @@ def test_mutation_policy_blocks_mutation_when_disabled():
     s = _scenario(mutations=True)
     allowed, reason = policy.check_scenario(s)
     assert allowed is False
-    assert "BTA_ALLOW_MUTATIONS" in reason
+    assert "ASSAY_ALLOW_MUTATIONS" in reason
 
 
 def test_mutation_policy_allows_mutation_when_enabled():

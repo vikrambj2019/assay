@@ -14,7 +14,7 @@
 services:
   agent:
     build: .
-    image: bta:dev
+    image: assay:dev
     volumes:
       - .:/app
       # X11 socket so headed Chromium can draw to the host desktop (Linux/X11).
@@ -22,48 +22,48 @@ services:
     environment:
       # ── Browser ────────────────────────────────────────────────────────────
       # Chromium runs headless by default; override per-run with
-      #   -e BTA_HEADLESS=false   to watch the browser on your screen.
-      BTA_HEADLESS: "${BTA_HEADLESS:-true}"
-      BTA_RESULTS_DIR: "/app/results"
-      # Slow actions down (ms) so a headed run is watchable, e.g. -e BTA_SLOWMO_MS=500
-      BTA_SLOWMO_MS: "${BTA_SLOWMO_MS:-0}"
-      BTA_NAV_TIMEOUT_MS: "${BTA_NAV_TIMEOUT_MS:-30000}"
-      BTA_ACTION_TIMEOUT_MS: "${BTA_ACTION_TIMEOUT_MS:-10000}"
-      BTA_SHOW_EVIDENCE: "${BTA_SHOW_EVIDENCE:-true}"
+      #   -e ASSAY_HEADLESS=false   to watch the browser on your screen.
+      ASSAY_HEADLESS: "${ASSAY_HEADLESS:-true}"
+      ASSAY_RESULTS_DIR: "/app/results"
+      # Slow actions down (ms) so a headed run is watchable, e.g. -e ASSAY_SLOWMO_MS=500
+      ASSAY_SLOWMO_MS: "${ASSAY_SLOWMO_MS:-0}"
+      ASSAY_NAV_TIMEOUT_MS: "${ASSAY_NAV_TIMEOUT_MS:-30000}"
+      ASSAY_ACTION_TIMEOUT_MS: "${ASSAY_ACTION_TIMEOUT_MS:-10000}"
+      ASSAY_SHOW_EVIDENCE: "${ASSAY_SHOW_EVIDENCE:-true}"
       # Host display for headed mode (X11).
       DISPLAY: "${DISPLAY:-}"
 
       # ── Agent (Claude Agent SDK) ────────────────────────────────────────────
       # The SDK reads ANTHROPIC_API_KEY; model/effort are optional overrides.
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
-      BTA_MODEL: "${BTA_MODEL:-claude-sonnet-5}"
-      BTA_EFFORT: "${BTA_EFFORT:-high}"
-      # Optional third-party gateway (e.g. OpenRouter). Set these + BTA_MODEL to a
+      ASSAY_MODEL: "${ASSAY_MODEL:-claude-sonnet-5}"
+      ASSAY_EFFORT: "${ASSAY_EFFORT:-high}"
+      # Optional third-party gateway (e.g. OpenRouter). Set these + ASSAY_MODEL to a
       # provider slug to route the SDK elsewhere; leave blank for Anthropic direct.
       ANTHROPIC_BASE_URL: "${ANTHROPIC_BASE_URL:-}"
       ANTHROPIC_AUTH_TOKEN: "${ANTHROPIC_AUTH_TOKEN:-}"
 
       # ── Application under test ──────────────────────────────────────────────
-      # BTA_BASE_URL is the application URL — distinct from ANTHROPIC_BASE_URL
-      # (the model gateway). Required for `bta check`.
-      BTA_BASE_URL: "${BTA_BASE_URL:-}"
-      BTA_LOGIN_URL: "${BTA_LOGIN_URL:-}"
+      # ASSAY_BASE_URL is the application URL — distinct from ANTHROPIC_BASE_URL
+      # (the model gateway). Required for `assay check`.
+      ASSAY_BASE_URL: "${ASSAY_BASE_URL:-}"
+      ASSAY_LOGIN_URL: "${ASSAY_LOGIN_URL:-}"
 
       # ── Test credentials (optional — supply both or neither) ────────────────
-      BTA_TEST_USERNAME: "${BTA_TEST_USERNAME:-}"
-      BTA_TEST_PASSWORD: "${BTA_TEST_PASSWORD:-}"
+      ASSAY_TEST_USERNAME: "${ASSAY_TEST_USERNAME:-}"
+      ASSAY_TEST_PASSWORD: "${ASSAY_TEST_PASSWORD:-}"
 
       # ── Auth state and context files ────────────────────────────────────────
-      BTA_AUTH_STATE: "${BTA_AUTH_STATE:-}"
-      BTA_AUTH_NOTES_FILE: "${BTA_AUTH_NOTES_FILE:-}"
-      BTA_TEST_DATA_FILE: "${BTA_TEST_DATA_FILE:-}"
+      ASSAY_AUTH_STATE: "${ASSAY_AUTH_STATE:-}"
+      ASSAY_AUTH_NOTES_FILE: "${ASSAY_AUTH_NOTES_FILE:-}"
+      ASSAY_TEST_DATA_FILE: "${ASSAY_TEST_DATA_FILE:-}"
 
       # ── Scope and budget ────────────────────────────────────────────────────
-      BTA_ALLOWED_ORIGINS: "${BTA_ALLOWED_ORIGINS:-}"
-      BTA_ALLOW_MUTATIONS: "${BTA_ALLOW_MUTATIONS:-false}"
-      BTA_DEPTH: "${BTA_DEPTH:-medium}"
-      BTA_MAX_SECONDS: "${BTA_MAX_SECONDS:-}"
-      BTA_MAX_ACTIONS: "${BTA_MAX_ACTIONS:-}"
-      BTA_MAX_COST_USD: "${BTA_MAX_COST_USD:-}"
+      ASSAY_ALLOWED_ORIGINS: "${ASSAY_ALLOWED_ORIGINS:-}"
+      ASSAY_ALLOW_MUTATIONS: "${ASSAY_ALLOW_MUTATIONS:-false}"
+      ASSAY_DEPTH: "${ASSAY_DEPTH:-medium}"
+      ASSAY_MAX_SECONDS: "${ASSAY_MAX_SECONDS:-}"
+      ASSAY_MAX_ACTIONS: "${ASSAY_MAX_ACTIONS:-}"
+      ASSAY_MAX_COST_USD: "${ASSAY_MAX_COST_USD:-}"
     # Give Chromium enough shared memory to avoid crashes on heavy pages.
     shm_size: "1gb"

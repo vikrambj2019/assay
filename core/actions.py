@@ -1,6 +1,6 @@
 """Actions — typed operations on interactive elements by their snapshot index.
 
-Each interactive element was tagged with ``data-bta-index`` during capture, so an
+Each interactive element was tagged with ``data-assay-index`` during capture, so an
 index maps straight to a Playwright locator. Actions inherit Playwright's
 actionability auto-wait (visible, enabled, stable) and its native value setter —
 so the React "field reverts after submit" problem from the old repos doesn't
@@ -38,7 +38,7 @@ class Actor:
         self.session = session
 
     def _loc(self, index: int) -> "Locator":
-        return self.session.page.locator(f'[data-bta-index="{index}"]')  # type: ignore[union-attr]
+        return self.session.page.locator(f'[data-assay-index="{index}"]')  # type: ignore[union-attr]
 
     async def _text(self, index: int | None) -> str:
         """Visible text of one element (by index), or the whole page body."""

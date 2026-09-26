@@ -1,6 +1,6 @@
 ---
 name: browser-check
-description: Run the local bta pre-PR browser check from a coding agent using change notes, README context, and a bounded depth.
+description: Run the local assay pre-PR browser check from a coding agent using change notes, README context, and a bounded depth.
 ---
 
 # Browser check
@@ -19,7 +19,7 @@ tests.
 3. Run the existing CLI from the repository root:
 
    ```bash
-   bta check --notes PATH --readme README.md --diff main --depth medium
+   assay check --notes PATH --readme README.md --diff main --depth medium
    ```
 
    Use `--depth low` for a smoke check, `medium` for normal changes, and
@@ -43,6 +43,6 @@ failure, and `2` means the run was incomplete, blocked, or errored.
 
 ## Safety and privacy
 
-Keep `BTA_ALLOW_MUTATIONS=false` unless the user explicitly authorized a local
+Keep `ASSAY_ALLOW_MUTATIONS=false` unless the user explicitly authorized a local
 test mutation. Do not weaken origin policy, expose secrets in notes, or paste
 auth-state contents into a report. Review screenshots before sharing them.

@@ -1,4 +1,4 @@
-"""Browser action tools as an in-process MCP server (server name: "bta").
+"""Browser action tools as an in-process MCP server (server name: "assay").
 
 Each tool is a one-liner over `core.actions.Actor`. The full transaction —
 action, settlement, snapshot, and screenshot — runs under a single

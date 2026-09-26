@@ -1,4 +1,4 @@
-"""Run budget management for `bta check` runs.
+"""Run budget management for `assay check` runs.
 
 A RunBudget tracks elapsed time, action count, and accumulated cost against
 configured limits.  It is started once before planning begins and checked

@@ -1,12 +1,12 @@
-"""Authentication setup for `bta check` runs.
+"""Authentication setup for `assay check` runs.
 
 Determines which auth strategy to use from the configuration, and provides
 an injectable ``AuthVerifyAdapter`` so the post-login state check can be
 tested without a real browser.
 
 Auth strategy (in priority order):
-  1. BTA_AUTH_STATE file exists  → load Playwright storage state (no login step)
-  2. BTA_TEST_USERNAME / PASSWORD → credential login via browser tools
+  1. ASSAY_AUTH_STATE file exists  → load Playwright storage state (no login step)
+  2. ASSAY_TEST_USERNAME / PASSWORD → credential login via browser tools
   3. Neither configured           → proceed without authentication
 
 After any login attempt the caller should call ``verify_authenticated()`` to
@@ -80,13 +80,13 @@ def resolve_auth_setup(cfg: "Config") -> AuthSetup:
             return AuthSetup(
                 mode=AuthMode.CREDENTIALS,
                 reason=(
-                    f"BTA_AUTH_STATE={cfg.auth_state} not found; will log in as "
+                    f"ASSAY_AUTH_STATE={cfg.auth_state} not found; will log in as "
                     f"{cfg.test_username!r} at {target}"
                 ),
             )
         return AuthSetup(
             mode=AuthMode.NONE,
-            reason=f"BTA_AUTH_STATE={cfg.auth_state} not found — no credentials available",
+            reason=f"ASSAY_AUTH_STATE={cfg.auth_state} not found — no credentials available",
         )
 
     if cfg.test_username and cfg.test_password:

@@ -1,4 +1,4 @@
-"""Report writers for `bta check` runs.
+"""Report writers for `assay check` runs.
 
 Produces three artifacts from one canonical RunResult:
 
@@ -198,7 +198,7 @@ def write_check_html(
     complete_label = "complete" if run_result.complete else "incomplete"
     header_html = (
         f"<header>"
-        f"<h1>bta check &mdash; "
+        f"<h1>assay check &mdash; "
         f"<span style='color:{code_color}'>{escape(code_label)}</span></h1>"
         f"<div style='margin:6px 0'>{counts_html}</div>"
         f"<div class='meta'>run&nbsp;{escape(run_result.run_id)} &bull; "
@@ -236,7 +236,7 @@ def write_check_html(
 
     doc = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
-        f"<title>bta check — {escape(code_label)}</title>"
+        f"<title>assay check — {escape(code_label)}</title>"
         f"<style>{_CSS}</style></head>"
         f"<body>{header_html}"
         f"<main>{ctx_html}{budget_html}"
@@ -372,7 +372,7 @@ def write_junit_xml(
     )
 
     suite_attrs = {
-        "name":     "bta check",
+        "name":     "assay check",
         "tests":    str(len(results)),
         "failures": str(n_fail),
         "errors":   str(n_err),
@@ -382,7 +382,7 @@ def write_junit_xml(
     suite  = ET.SubElement(suites, "testsuite", suite_attrs)
 
     for r in results:
-        classname = f"bta.check.{r.verdict.value.lower()}"
+        classname = f"assay.check.{r.verdict.value.lower()}"
         safe = make_redactor()
         tc = ET.SubElement(suite, "testcase", {
             "classname": classname,

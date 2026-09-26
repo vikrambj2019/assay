@@ -7,8 +7,8 @@ Mocked (default, always runs in CI)
     from the ``BugSpec`` page states.  No browser, no LLM, fully deterministic.
 
 Live (opt-in, requires credentials + running fixture app)
-    Activated by setting ``BTA_EVAL_LIVE=1`` in the environment.  Runs actual
-    ``bta check`` against a started fixture app instance.  Results MUST record
+    Activated by setting ``ASSAY_EVAL_LIVE=1`` in the environment.  Runs actual
+    ``assay check`` against a started fixture app instance.  Results MUST record
     model ID, configuration, and run count — percentages from a single run are
     never published.
 

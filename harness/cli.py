@@ -1,7 +1,7 @@
-"""`agent` / `bta` command-line entrypoint.
+"""`agent` / `assay` command-line entrypoint.
 
-  bta suite <file>   — run a YAML suite of goals (parallel + `needs:` deps)
-  bta check [opts]   — collect context and run a pre-PR browser check
+  assay suite <file>   — run a YAML suite of goals (parallel + `needs:` deps)
+  assay check [opts]   — collect context and run a pre-PR browser check
 
 .env loading: load_dotenv() is called once here, before any subcommand runs,
 so values in .env are visible to Config.from_env() without the caller having
@@ -192,7 +192,7 @@ def _print_context_summary(ctx: "object") -> None:  # CheckContext
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="bta",
+        prog="assay",
         description="Natural-language browser testing agent.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
@@ -215,10 +215,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="git reference — include committed+staged+unstaged diff since merge-base")
     p_check.add_argument(
         "--depth", choices=["low", "medium", "high"], default=None,
-        help="test depth preset — overrides BTA_DEPTH (default: medium)")
+        help="test depth preset — overrides ASSAY_DEPTH (default: medium)")
     p_check.add_argument(
         "--url", default=None, metavar="URL",
-        help="application URL — overrides BTA_BASE_URL")
+        help="application URL — overrides ASSAY_BASE_URL")
     p_check.add_argument(
         "--max-seconds", type=int, default=None, metavar="N",
         help="override maximum run time in seconds")

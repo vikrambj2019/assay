@@ -1,6 +1,6 @@
 // Injected DOM-walk. One pass over the live DOM producing a compact, flattened
 // tree that carries BOTH "what can I do" (interactive elements, each tagged with
-// data-bta-index so Python can build a Playwright locator) and "what is true"
+// data-assay-index so Python can build a Playwright locator) and "what is true"
 // (roles, accessible names, states, and all visible text in reading order).
 //
 // Runs as an expression via page.evaluate(). Defensive throughout: one bad
@@ -375,7 +375,7 @@
         let oindex = null;
         if (!ostates.includes('disabled')) {
           oindex = counter++;
-          try { opt.setAttribute('data-bta-index', String(oindex)); } catch (e) {}
+          try { opt.setAttribute('data-assay-index', String(oindex)); } catch (e) {}
         }
         return { type: 'element', tag: 'option', role: 'option',
                  name: accName(opt, 'option', 'option'), value: '', states: ostates,
@@ -437,7 +437,7 @@
     let index = null;
     if (interactive || scrollable) {
       index = counter++;
-      try { el.setAttribute('data-bta-index', String(index)); } catch (e) {}
+      try { el.setAttribute('data-assay-index', String(index)); } catch (e) {}
     }
 
     const hasDirectText = Array.from(el.childNodes).some(
@@ -460,7 +460,7 @@
   }
 
   // Clear stale indices from a previous snapshot before re-tagging.
-  try { document.querySelectorAll('[data-bta-index]').forEach((e) => e.removeAttribute('data-bta-index')); } catch (e) {}
+  try { document.querySelectorAll('[data-assay-index]').forEach((e) => e.removeAttribute('data-assay-index')); } catch (e) {}
 
   const root = walk(document.body, 0);
   const nodes = root ? (root.type === 'group' ? root.children : [root]) : [];

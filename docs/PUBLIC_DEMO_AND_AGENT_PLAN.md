@@ -19,7 +19,7 @@ skills provide thin instructions around that interface.
 ### 2. Portable coding-agent skill — first implementation
 
 - Add `skills/browser-check/SKILL.md`.
-- Teach an agent when to run `bta check`, how to select depth, and how to read
+- Teach an agent when to run `assay check`, how to select depth, and how to read
   verdicts and reports.
 - Require local or trusted fixture apps, preserve mutation policy, and never
   request production credentials.
@@ -27,7 +27,7 @@ skills provide thin instructions around that interface.
 
 ### 3. Stable machine interface
 
-- Add `--format json` and `--output PATH` to `bta check`.
+- Add `--format json` and `--output PATH` to `assay check`.
 - Preserve the existing report schemas and exit codes.
 - Add a small JSON summary suitable for CI and coding-agent consumption.
 
