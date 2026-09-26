@@ -25,14 +25,18 @@ skills provide thin instructions around that interface.
   request production credentials.
 - Keep the skill independent of any one coding-agent vendor.
 
-### 3. Stable machine interface
+### 3. Stable machine interface — implemented
 
 - Add `--format json` and `--output PATH` to `assay check`.
+- Add frozen-plan reruns (`--plan PATH`, `--only SCENARIO_ID`) so a coding
+  agent's fix-and-verify loop cannot drift its expectations.
 - Preserve the existing report schemas and exit codes.
 - Add a small JSON summary suitable for CI and coding-agent consumption.
 
 ### 4. Demo packaging and video
 
+- Hosted synthetic demo: Driftline (https://driftline-demo.onrender.com),
+  a separate repository, used as the realistic demo target.
 - Add a one-command Docker demo service for the fixture app.
 - Record short synthetic videos: install/demo, failure report, and coding-agent
   invocation.
