@@ -77,8 +77,14 @@ def write_results_json(
     out_dir: Path,
     ctx: "CheckContext | None" = None,
     budget: "RunBudget | None" = None,
+    plan_info: "dict | None" = None,
+    selection: "dict | None" = None,
 ) -> Path:
     """Write ``results.json`` to *out_dir* and return the path.
+
+    ``plan_info`` records which plan file was executed (path, sha256, and
+    whether it was generated or loaded with ``--plan``). ``selection`` records
+    an ``--only`` subset. Both fields are additive within version 1.
 
     The file is versioned so consumers can detect format changes.  Application
     text in ``reason`` fields is included verbatim (consumers should escape
@@ -124,6 +130,10 @@ def write_results_json(
         "scenarios": scenario_rows,
         "summary": summary,
     }
+    if plan_info is not None:
+        doc["plan"] = plan_info
+    if selection is not None:
+        doc["selection"] = selection
 
     path = out_dir / "results.json"
     text = json.dumps(doc, indent=2, ensure_ascii=False)

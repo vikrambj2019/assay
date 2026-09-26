@@ -1,4 +1,4 @@
-"""`agent` / `assay` command-line entrypoint.
+"""`assay` (alias `agent`) command-line entrypoint.
 
   assay suite <file>   — run a YAML suite of goals (parallel + `needs:` deps)
   assay check [opts]   — collect context and run a pre-PR browser check
@@ -6,12 +6,20 @@
 .env loading: load_dotenv() is called once here, before any subcommand runs,
 so values in .env are visible to Config.from_env() without the caller having
 to set them manually. Process environment variables already set always win.
+
+Machine interface (`assay check --format json`):
+  stdout carries exactly one JSON document (schema ``assay.check.summary``);
+  every human-readable line goes to stderr. The same document is written to
+  ``summary.json`` in the output directory. Exit codes are unchanged:
+  0 pass, 1 confirmed failure, 2 incomplete / blocked / error / invalid input.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import shutil
 import sys
 from pathlib import Path
 
@@ -23,107 +31,171 @@ def _cmd_suite(args: argparse.Namespace) -> int:
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
-    from core.config import Config, _parse_url
-    from core.context import collect_context
+    """Run a check; in JSON mode keep stdout clean for the summary document."""
+    from core.check_summary import dumps_summary
+
+    if args.format != "json":
+        code, _ = _run_check(args)
+        return code
+
+    real_stdout = sys.stdout
+    with contextlib.redirect_stdout(sys.stderr):
+        code, summary = _run_check(args)
+    real_stdout.write(dumps_summary(summary) + "\n")
+    real_stdout.flush()
+    return code
+
+
+def _fail(message: str, status: str = "invalid_input") -> tuple[int, dict]:
+    from core.check_summary import error_summary
+
+    print(f"error: {message}", file=sys.stderr)
+    return 2, error_summary(message, status=status)
+
+
+def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
+    from core.check_summary import (
+        build_summary,
+        file_sha256,
+        relabel_unselected,
+        select_scenarios,
+        write_summary_files,
+    )
+    from core.config import Config, _parse_url, legacy_env_warnings
+
+    for warning in legacy_env_warnings():
+        print(f"warning: {warning}", file=sys.stderr)
 
     # Build config from env (includes .env via load_dotenv called in main()).
     try:
         cfg = Config.from_env()
     except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
+        return _fail(str(e))
 
     # CLI arguments override env / .env (highest priority in the precedence chain).
     if args.url:
         try:
             cfg.app_url = _parse_url(args.url, "--url")
         except ValueError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 2
+            return _fail(str(e))
     if args.depth:
         cfg.depth = args.depth
-    if args.max_seconds is not None:
-        if args.max_seconds <= 0:
-            print("error: --max-seconds must be a positive integer", file=sys.stderr)
-            return 2
-        cfg.max_seconds = args.max_seconds
-    if args.max_actions is not None:
-        if args.max_actions <= 0:
-            print("error: --max-actions must be a positive integer", file=sys.stderr)
-            return 2
-        cfg.max_actions = args.max_actions
-    if args.max_cost_usd is not None:
-        if args.max_cost_usd <= 0:
-            print("error: --max-cost-usd must be a positive number", file=sys.stderr)
-            return 2
-        cfg.max_cost_usd = args.max_cost_usd
+    for flag, attr, value in (
+        ("--max-seconds", "max_seconds", args.max_seconds),
+        ("--max-actions", "max_actions", args.max_actions),
+        ("--max-cost-usd", "max_cost_usd", args.max_cost_usd),
+    ):
+        if value is not None:
+            if value <= 0:
+                return _fail(f"{flag} must be a positive number")
+            setattr(cfg, attr, value)
+
+    if args.plan and args.plan_only:
+        return _fail("--plan-only cannot be combined with --plan (the plan already exists)")
+    if args.only and not args.plan:
+        return _fail("--only requires --plan so the rerun uses the same saved expectations")
 
     # Validate all required inputs before any paid model call.
     try:
         cfg.validate_for_check()
     except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
+        return _fail(str(e))
 
-    notes = Path(args.notes)
-    if not notes.is_file():
-        print(f"error: --notes {notes}: file not found", file=sys.stderr)
-        return 2
+    out_dir = Path(args.output) if args.output else cfg.results_root / "check"
 
-    readme = Path(args.readme) if args.readme else None
-
-    # Collect context (notes, README, git diff).
-    try:
-        ctx = collect_context(notes, readme, args.diff, cfg)
-    except (ValueError, FileNotFoundError) as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
-
-    # Report context provenance to the user.
-    _print_context_summary(ctx)
-
-    # Planning time is part of the run budget, including in --plan-only mode.
     from core.budget import BudgetExhausted, budget_from_depth
-    budget = budget_from_depth(
-        cfg.depth,
-        max_seconds=cfg.max_seconds,
-        max_actions=cfg.max_actions,
-        max_cost_usd=cfg.max_cost_usd,
-    )
-    budget.start()
+    from core.plan import load_plan, save_plan
 
-    # Run planner.
-    from core.plan import save_plan
-    from core.planner import AnthropicPlannerAdapter, PlanningError, run_planner
+    ctx = None
+    if args.plan:
+        # ── Frozen plan: reuse saved expectations exactly ───────────────────
+        source_path = Path(args.plan)
+        try:
+            plan = load_plan(source_path)
+        except FileNotFoundError:
+            return _fail(f"--plan {source_path}: file not found")
+        except (ValueError, KeyError, TypeError) as e:
+            return _fail(f"--plan {source_path}: not a valid plan ({e})")
+        if args.readme or args.diff:
+            print("warning: --readme/--diff are ignored with --plan; the saved plan is used as-is",
+                  file=sys.stderr)
+        if not args.depth:
+            cfg.depth = plan.depth
+        plan_path = out_dir / "plan.json"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if source_path.resolve() != plan_path.resolve():
+            shutil.copyfile(source_path, plan_path)  # byte-identical copy keeps the hash
+        plan_source = "loaded"
+        print(f"\n  plan:   {plan_path} (loaded from {source_path}, {len(plan.scenarios)} scenario(s))")
+        budget = budget_from_depth(
+            cfg.depth, max_seconds=cfg.max_seconds,
+            max_actions=cfg.max_actions, max_cost_usd=cfg.max_cost_usd,
+        )
+        budget.start()
+    else:
+        # ── Generate a new plan from notes / README / diff ──────────────────
+        from core.context import collect_context
+
+        notes = Path(args.notes)
+        if not notes.is_file():
+            return _fail(f"--notes {notes}: file not found")
+        readme = Path(args.readme) if args.readme else None
+        try:
+            ctx = collect_context(notes, readme, args.diff, cfg)
+        except (ValueError, FileNotFoundError) as e:
+            return _fail(str(e))
+        _print_context_summary(ctx)
+
+        # Planning time is part of the run budget, including in --plan-only mode.
+        budget = budget_from_depth(
+            cfg.depth, max_seconds=cfg.max_seconds,
+            max_actions=cfg.max_actions, max_cost_usd=cfg.max_cost_usd,
+        )
+        budget.start()
+
+        from core.planner import AnthropicPlannerAdapter, PlanningError, run_planner
+
+        if args.plan_only:
+            print("\nNote: --plan-only mode — planning may incur model cost.")
+        adapter = AnthropicPlannerAdapter(model=cfg.model)
+        try:
+            plan = run_planner(ctx, cfg.depth, adapter)
+            budget.check()
+        except BudgetExhausted as e:
+            return _fail(f"planning exceeded the run budget: {e}", status="planning_failed")
+        except PlanningError as e:
+            return _fail(f"planning failed: {e}", status="planning_failed")
+
+        plan_path = save_plan(plan, out_dir)
+        plan_source = "generated"
+        print(f"\n  plan:   {plan_path} ({len(plan.scenarios)} scenario(s))")
+        if plan.coverage_suggestions:
+            print(f"  suggestions: {len(plan.coverage_suggestions)} unselected idea(s)")
 
     if args.plan_only:
-        print("\nNote: --plan-only mode — planning may incur model cost.")
-
-    adapter = AnthropicPlannerAdapter(model=cfg.model)
-    try:
-        plan = run_planner(ctx, cfg.depth, adapter)
-        budget.check()
-    except BudgetExhausted as e:
-        print(f"error: planning exceeded the run budget: {e}", file=sys.stderr)
-        return 2
-    except PlanningError as e:
-        print(f"error: planning failed: {e}", file=sys.stderr)
-        return 2
-
-    out_dir = cfg.results_root / "check"
-    plan_path = save_plan(plan, out_dir)
-    print(f"\n  plan:   {plan_path} ({len(plan.scenarios)} scenario(s))")
-    if plan.coverage_suggestions:
-        print(f"  suggestions: {len(plan.coverage_suggestions)} unselected idea(s)")
-
-    if args.plan_only:
+        summary = build_summary(
+            code=0, run_result=None, plan=plan, plan_path=plan_path,
+            plan_source=plan_source, out_dir=out_dir, base_url=cfg.app_url,
+            budget=budget, planned_only=True,
+        )
+        write_summary_files(summary, out_dir)
         print("(plan-only mode — no scenarios executed)")
-        return 0
+        return 0, summary
 
-    # ── Execute plan ──────────────────────────────────────────────────────────
+    # ── --only: run a subset (plus prerequisites) of the saved plan ─────────
+    exec_plan, selected, unselected = plan, None, []
+    if args.only:
+        try:
+            exec_plan, selected, unselected = select_scenarios(plan, args.only)
+        except ValueError as e:
+            return _fail(str(e))
+        print(f"  only:   {', '.join(selected)} ({len(unselected)} other scenario(s) not selected)")
+
+    # ── Execute plan ─────────────────────────────────────────────────────────
     from core.check_report import exit_code, write_check_html, write_junit_xml, write_results_json
     from core.executor import run_plan
     from core.policy import MutationPolicy
+    from core.schema import Verdict
 
     mutation_policy = MutationPolicy(allow_mutations=cfg.allow_mutations)
 
@@ -131,31 +203,44 @@ def _cmd_check(args: argparse.Namespace) -> int:
     adapter_factory = BrowserScenarioAdapterFactory(cfg, out_dir, budget)
 
     run_result = asyncio.run(
-        run_plan(plan, mutation_policy, adapter_factory, budget=budget)
+        run_plan(exec_plan, mutation_policy, adapter_factory, budget=budget)
     )
+    if unselected:
+        relabel_unselected(run_result, unselected)
 
-    # Write all three report artifacts.  Done unconditionally so partial results
+    plan_info = {"path": str(plan_path), "sha256": file_sha256(plan_path), "source": plan_source}
+    selection = {"only": list(args.only), "selected": selected, "not_selected": unselected} if args.only else None
+
+    # Write all report artifacts. Done unconditionally so partial results
     # are always available ("started runs always retain available results").
-    json_path  = write_results_json(run_result, plan, out_dir, ctx=ctx, budget=budget)
-    html_path  = write_check_html(run_result, plan, out_dir, ctx=ctx, budget=budget)
+    json_path = write_results_json(run_result, plan, out_dir, ctx=ctx, budget=budget,
+                                   plan_info=plan_info, selection=selection)
+    html_path = write_check_html(run_result, plan, out_dir, ctx=ctx, budget=budget)
     junit_path = write_junit_xml(run_result, plan, out_dir)
+    code = exit_code(run_result)
+    summary = build_summary(
+        code=code, run_result=run_result, plan=plan, plan_path=plan_path,
+        plan_source=plan_source, out_dir=out_dir, base_url=cfg.app_url,
+        selected=selected, unselected=unselected, budget=budget,
+    )
+    write_summary_files(summary, out_dir)
+
     print(f"  results: {json_path}")
     print(f"  report:  {html_path}")
     print(f"  junit:   {junit_path}")
+    print(f"  summary: {out_dir / 'summary.md'}")
 
-    code = exit_code(run_result)
     if code == 0:
-        print("\nresult: PASS")
+        print("\nresult: PASS" + (" (partial run: --only)" if unselected else ""))
     elif code == 1:
         print("\nresult: FAIL")
         for r in run_result.scenario_results:
-            from core.schema import Verdict
             if r.verdict is Verdict.FAIL:
-                print(f"  FAIL  {r.scenario_title}: {r.reason}")
+                print(f"  FAIL  {r.scenario_id} {r.scenario_title}: {r.reason}")
     else:
         print("\nresult: INCOMPLETE / ERROR")
 
-    return code
+    return code, summary
 
 
 def _print_context_summary(ctx: "object") -> None:  # CheckContext
@@ -165,7 +250,7 @@ def _print_context_summary(ctx: "object") -> None:  # CheckContext
     if ctx.readme_text is not None:
         print(f"  readme: {ctx.readme_path} ({len(ctx.readme_text):,} chars)")
     else:
-        print(f"  readme: not found")
+        print("  readme: not found")
     if ctx.diff_ref is not None:
         diff_size = len(ctx.diff_text) if ctx.diff_text else 0
         print(f"  diff:   {ctx.diff_ref} ({diff_size:,} chars)")
@@ -193,7 +278,7 @@ def _print_context_summary(ctx: "object") -> None:  # CheckContext
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="assay",
-        description="Natural-language browser testing agent.",
+        description="Natural-language browser testing agent with evidence-backed verdicts.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -203,10 +288,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_suite.set_defaults(func=_cmd_suite)
 
     # ── check ──────────────────────────────────────────────────────────────
-    p_check = sub.add_parser("check", help="run a pre-PR browser check")
+    p_check = sub.add_parser(
+        "check", help="run a pre-PR browser check",
+        description="Plan and run a bounded browser check. Exit codes: 0 pass, "
+                    "1 confirmed failure, 2 incomplete/blocked/error/invalid input.",
+    )
+    source = p_check.add_mutually_exclusive_group(required=True)
+    source.add_argument(
+        "--notes", metavar="PATH",
+        help="notes/changes file (Markdown) to plan from")
+    source.add_argument(
+        "--plan", metavar="PATH",
+        help="rerun a saved plan.json exactly as written (no re-planning)")
     p_check.add_argument(
-        "--notes", required=True, metavar="PATH",
-        help="required: notes/changes file (Markdown)")
+        "--only", action="append", default=[], metavar="SCENARIO_ID",
+        help="with --plan: run only this scenario and its prerequisites (repeatable)")
     p_check.add_argument(
         "--readme", default=None, metavar="PATH",
         help="README file (default: README.md in working directory)")
@@ -215,10 +311,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="git reference — include committed+staged+unstaged diff since merge-base")
     p_check.add_argument(
         "--depth", choices=["low", "medium", "high"], default=None,
-        help="test depth preset — overrides ASSAY_DEPTH (default: medium)")
+        help="test depth preset — overrides ASSAY_DEPTH (default: medium; "
+             "with --plan: the plan's depth)")
     p_check.add_argument(
         "--url", default=None, metavar="URL",
         help="application URL — overrides ASSAY_BASE_URL")
+    p_check.add_argument(
+        "--output", default=None, metavar="DIR",
+        help="artifact directory (default: $ASSAY_RESULTS_DIR/check, i.e. results/check)")
+    p_check.add_argument(
+        "--format", choices=["text", "json"], default="text",
+        help="json: print one summary document to stdout and send all logs to stderr")
     p_check.add_argument(
         "--max-seconds", type=int, default=None, metavar="N",
         help="override maximum run time in seconds")
