@@ -162,6 +162,11 @@ class Config:
     # after each action, so it can react to a broken action. Off = DOM only.
     show_evidence: bool = True
 
+    # Record a browser video per check scenario (ASSAY_RECORD_VIDEO / --record-video).
+    # record_video_dir is set per scenario by the check runner, not from env.
+    record_video: bool = False
+    record_video_dir: Path | None = None
+
     # ── Agent model ──────────────────────────────────────────────────────
     # Driven by the Claude Agent SDK (which runs the Claude Code CLI).
     # The SDK reads ANTHROPIC_API_KEY from the environment; `effort` maps to
@@ -272,6 +277,7 @@ class Config:
                 os.environ.get("ASSAY_SLOWMO_MS", "0"), "ASSAY_SLOWMO_MS"
             ),
             show_evidence=_strict_env_bool("ASSAY_SHOW_EVIDENCE", True),
+            record_video=_strict_env_bool("ASSAY_RECORD_VIDEO", False),
             model=os.environ.get("ASSAY_MODEL", "claude-sonnet-5"),
             effort=os.environ.get("ASSAY_EFFORT", "high"),
             # Gateway (ANTHROPIC_*) — kept separate from app URL.

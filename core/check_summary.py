@@ -140,6 +140,11 @@ def format_plan_table(plan: Plan) -> list[str]:
 
 # ── Summary construction ──────────────────────────────────────────────────────
 
+def _video(out_dir: Path, scenario_id: str) -> "str | None":
+    path = out_dir / scenario_id / "video.webm"
+    return str(path) if path.is_file() else None
+
+
 def _status_for(code: int) -> str:
     return {0: "pass", 1: "fail"}.get(code, "incomplete")
 
@@ -240,6 +245,7 @@ def build_summary(
                 "title": r.scenario_title,
                 "reason": r.reason,
                 "assertions": assertions,
+                "video": _video(out_dir, r.scenario_id),
             })
         elif r.verdict in ATTENTION_HINTS and r.scenario_id not in unselected:
             doc["needs_attention"].append({
@@ -248,10 +254,12 @@ def build_summary(
                 "verdict": r.verdict.value,
                 "reason": r.reason,
                 "hint": ATTENTION_HINTS[r.verdict],
+                "video": _video(out_dir, r.scenario_id),
             })
 
     doc["scenarios"] = [
-        {"id": r.scenario_id, "title": r.scenario_title, "verdict": r.verdict.value}
+        {"id": r.scenario_id, "title": r.scenario_title, "verdict": r.verdict.value,
+         "video": _video(out_dir, r.scenario_id)}
         for r in run_result.scenario_results
     ]
     doc["artifacts"] = _artifact_map(
@@ -332,6 +340,8 @@ def render_markdown(doc: dict[str, Any]) -> str:
         lines += ["#### Failures", ""]
         for f in doc["failures"]:
             lines.append(f"- **{_md(f['title'])}** (`{f['scenario_id']}`): {_md(f['reason'])}")
+            if f.get("video"):
+                lines.append(f"  - recording: `{f['video']}`")
             for a in f["assertions"]:
                 if a.get("observed") is not None:
                     lines.append(f"  - expected: {_md(a['expected'])}; observed: {_md(a['observed'])}")

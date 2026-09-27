@@ -82,5 +82,7 @@ class BrowserScenarioAdapterFactory:
             scenario_cfg.storage_state = scenario_cfg.auth_state
         scenario_dir = self.out_dir / scenario.id
         scenario_dir.mkdir(parents=True, exist_ok=True)
+        if scenario_cfg.record_video:
+            scenario_cfg.record_video_dir = scenario_dir
         session = await BrowserSession(scenario_cfg).start()
         return BrowserScenarioAdapter(session, scenario_cfg, scenario_dir, self.budget)

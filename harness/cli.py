@@ -81,6 +81,8 @@ def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
             return _fail(str(e))
     if args.depth:
         cfg.depth = args.depth
+    if args.record_video:
+        cfg.record_video = True
     for flag, attr, value in (
         ("--max-seconds", "max_seconds", args.max_seconds),
         ("--max-actions", "max_actions", args.max_actions),
@@ -339,6 +341,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_check.add_argument(
         "--max-cost-usd", type=float, default=None, metavar="F",
         help="override maximum cost in USD")
+    p_check.add_argument(
+        "--record-video", action="store_true", default=False,
+        help="save a browser recording per scenario as <output>/<scenario-id>/video.webm "
+             "(also ASSAY_RECORD_VIDEO=true); recordings may show sensitive data")
     p_check.add_argument(
         "--plan-only", action="store_true", default=False,
         help="generate and save plan.json without executing scenarios "

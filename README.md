@@ -144,7 +144,8 @@ uncertainty visible.
 | `--url URL` | Application URL; overrides `ASSAY_BASE_URL`. |
 | `--output DIR` | Artifact directory (default `results/check`). |
 | `--format text\|json` | `json` prints one summary document to stdout and all logs to stderr. |
-| `--plan-only` | Write the plan without executing scenarios (planning still calls the model). |
+| `--plan-only` | Write the plan without executing scenarios (planning still calls the model). Prints a scenario table and the commands to run all or some of it. |
+| `--record-video` | Save a browser recording per scenario as `<output>/<scenario-id>/video.webm`, embedded in `report.html` (also `ASSAY_RECORD_VIDEO=true`). |
 | `--max-seconds`, `--max-actions`, `--max-cost-usd` | Override the depth budget. |
 
 ### For coding agents and CI
@@ -275,6 +276,7 @@ These files are written to `results/check/` (or `--output DIR`) on every run, in
 | `junit.xml` | JUnit XML | CI-compatible; BLOCKED/UNVERIFIED map to `<skipped>` with status in message |
 | `summary.json` | JSON (`assay.check.summary` v1) | Compact machine summary; identical to `--format json` stdout |
 | `summary.md` | Markdown | PR-ready summary: counts, failures with expected vs observed, items needing attention |
+| `<scenario-id>/video.webm` | WebM | Browser recording per scenario, only with `--record-video` |
 
 ### Artifact privacy
 
@@ -283,7 +285,7 @@ These files are written to `results/check/` (or `--output DIR`) on every run, in
 - Configured credentials (username, password, API keys) are redacted from all
   text artifacts before writing.
 - Application-sourced text in HTML reports is HTML-escaped.
-- Screenshots may capture sensitive on-screen data — review before sharing.
+- Screenshots and `--record-video` recordings may capture sensitive on-screen data — review before sharing.
 
 ### Exit codes
 

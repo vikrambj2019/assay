@@ -286,4 +286,4 @@ def test_executed_summary_lists_verdicts(tmp_path, capsys, monkeypatch):
     plan_path = _write_plan(tmp_path, _scenario("s1"))
     _use_fake_browser(monkeypatch, {})
     _, doc, _ = _run_json(capsys, ["--plan", str(plan_path), "--output", str(tmp_path / "o")])
-    assert doc["scenarios"] == [{"id": "s1", "title": "Scenario s1", "verdict": "PASS"}]
+    assert doc["scenarios"] == [{"id": "s1", "title": "Scenario s1", "verdict": "PASS", "video": None}]

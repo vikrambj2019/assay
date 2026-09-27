@@ -108,6 +108,9 @@ def write_results_json(
             "assertions_checked": r.assertions_checked,
             "assertion_evidence": dict(r.assertion_evidence),
         }
+        video = scenario_video(out_dir, r.scenario_id)
+        if video:
+            row["video"] = video
         if r.assertions_checked:
             row["assertion_kinds"] = {
                 aid: assertion_kinds.get(aid, "unknown")
@@ -176,6 +179,7 @@ main{padding:20px 28px;max-width:960px}
 .suggestions{padding-left:18px;color:#57606a;font-size:13px}
 .budget{background:#fff8ed;border:1px solid #d0a000;border-radius:8px;
         padding:10px 16px;margin:0 0 18px;font-size:13px}
+.rec{width:100%;max-width:880px;border:1px solid #d0d7de;border-radius:6px;margin:8px 0 0}
 .pill{display:inline-block;padding:1px 7px;border-radius:8px;font-size:11px;
       font-weight:600;border:1px solid currentColor;margin-right:4px}
 """
@@ -228,7 +232,8 @@ def write_check_html(
     assertion_kinds = _assertion_kind_map(plan)
     plan_lookup = {s.id: s for s in plan.scenarios}
     cards_html = "\n".join(
-        _scenario_card(r, plan_lookup.get(r.scenario_id), assertion_kinds)
+        _scenario_card(r, plan_lookup.get(r.scenario_id), assertion_kinds,
+                       scenario_video(out_dir, r.scenario_id))
         for r in run_result.scenario_results
     )
 
@@ -264,6 +269,7 @@ def _scenario_card(
     r: ScenarioResult,
     scenario,  # Scenario | None from the plan
     assertion_kinds: dict[str, str],
+    video: "str | None" = None,
 ) -> str:
     color = _COLOR[r.verdict]
     badge = f"<span class='badge' style='background:{color}'>{escape(r.verdict.value)}</span>"
@@ -289,6 +295,13 @@ def _scenario_card(
             for aid, value in r.assertion_evidence.items()
         )
         evidence_html = f"<ul class='evidence'><strong>Evidence</strong>{items}</ul>"
+    video_html = ""
+    if video:
+        src = escape(video, quote=True)
+        video_html = (
+            f"<video class='rec' controls preload='metadata' src='{src}'></video>"
+            f"<p class='meta'><a href='{src}'>Download recording</a></p>"
+        )
 
     return (
         f"<div class='card'>"
@@ -296,7 +309,7 @@ def _scenario_card(
         f"<span class='title'>{escape(r.scenario_title)}</span>"
         f"<span style='color:#6e7781;font-size:12px'>{escape(r.scenario_id)}</span>"
         f"</div>"
-        f"<div class='card-body'>{goal_html}{reason_html}{assertions_html}{evidence_html}</div>"
+        f"<div class='card-body'>{goal_html}{reason_html}{assertions_html}{evidence_html}{video_html}</div>"
         f"</div>"
     )
 
@@ -419,6 +432,12 @@ def write_junit_xml(
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
+def scenario_video(out_dir: Path, scenario_id: str) -> "str | None":
+    """Relative path of a scenario's recorded video, or None when not recorded."""
+    rel = Path(scenario_id) / "video.webm"
+    return rel.as_posix() if (out_dir / rel).is_file() else None
+
 
 def _assertion_kind_map(plan: Plan) -> dict[str, str]:
     """Map assertion ID → kind value string for annotation in reports."""
