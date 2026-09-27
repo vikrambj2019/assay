@@ -21,6 +21,7 @@ from core.planner import (
     PlanningError,
     run_planner,
 )
+from core.planner import _build_system_prompt, _build_user_message
 
 
 def test_anthropic_adapter_skips_thinking_blocks(monkeypatch):
@@ -56,6 +57,26 @@ def test_anthropic_adapter_requires_text_block():
     adapter._max_tokens = 10
     with pytest.raises(ValueError, match="No text block"):
         adapter.complete("system", "user")
+
+
+def test_prompt_teaches_deterministic_check_types_and_notes_path():
+    policy = DEPTH_POLICIES["medium"]
+    system = _build_system_prompt(policy, "medium")
+    ctx = _make_context()
+    user = _build_user_message(ctx, policy, "medium")
+    assert '"check": {"type": "text_visible"' in system
+    assert '"type": "url_contains"' in system
+    assert '"type": "persistence"' in system
+    assert "Use 'changes.md' as the source path" in user
+    assert "not the example '<notes-filename>' or 'changes.md'" in user
+
+
+def test_prompt_uses_actual_notes_filename():
+    policy = DEPTH_POLICIES["low"]
+    ctx = _make_context()
+    ctx.notes_path = Path("driftline-booking-flow.md")
+    user = _build_user_message(ctx, policy, "low")
+    assert "Use 'driftline-booking-flow.md' as the source path" in user
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
