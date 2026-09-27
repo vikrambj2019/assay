@@ -146,6 +146,10 @@ def _build_system_prompt(policy: DepthPolicy, depth: str) -> str:
            When a requirement names exact visible text or a URL, always
            populate check with the matching type. Use null only when no
            deterministic check is possible.
+           Do not use element_visible or element_hidden with a guessed CSS
+           selector. Use those checks only when the selector appears verbatim
+           in the notes, README, or diff; otherwise prefer text_visible,
+           text_absent, or a model-evaluated assertion.
         9. The prerequisites array contains scenario IDs only (for example
            ["s-001"]), never titles, descriptions, or natural-language text.
            Every prerequisite must exactly match an id in the same scenarios

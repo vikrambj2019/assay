@@ -106,6 +106,15 @@ def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
 
     out_dir = Path(args.output) if args.output else cfg.results_root / "check"
 
+    # A generated plan is the contract for execution. If an output directory
+    # already contains one, require an explicit --plan so a rerun cannot
+    # silently replace the expectations with a newly sampled LLM plan.
+    if args.notes and not args.plan_only and (out_dir / "plan.json").is_file():
+        return _fail(
+            f"{out_dir / 'plan.json'} already exists; use --plan {out_dir / 'plan.json'} "
+            "to execute the frozen plan, or choose a new --output directory"
+        )
+
     from core.budget import BudgetExhausted, budget_from_depth
     from core.plan import load_plan, save_plan
 

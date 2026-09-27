@@ -282,6 +282,21 @@ def test_plan_only_text_prints_table(tmp_path, capsys, monkeypatch):
     assert "--only <ID>" in out
 
 
+def test_existing_generated_plan_requires_explicit_frozen_plan(tmp_path, capsys, monkeypatch):
+    notes = tmp_path / "README.md"
+    notes.write_text("# x\n- Users can sign in.\n")
+    _patch_planner(monkeypatch, make_plan("low", [_scenario("login")]))
+    out_dir = tmp_path / "out"
+
+    first = _run_json(capsys, ["--notes", str(notes), "--plan-only", "--output", str(out_dir)])
+    assert first[0] == 0
+    code, doc, err = _run_json(capsys, ["--notes", str(notes), "--output", str(out_dir)])
+    assert code == 2
+    assert doc["status"] == "invalid_input"
+    assert "use --plan" in doc["error"]
+    assert "already exists" in err
+
+
 def test_executed_summary_lists_verdicts(tmp_path, capsys, monkeypatch):
     plan_path = _write_plan(tmp_path, _scenario("s1"))
     _use_fake_browser(monkeypatch, {})

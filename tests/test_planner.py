@@ -76,6 +76,7 @@ def test_prompt_teaches_deterministic_check_types_and_notes_path():
     assert '"check": {"type": "text_visible"' in system
     assert '"type": "url_contains"' in system
     assert '"type": "persistence"' in system
+    assert "Do not use element_visible or element_hidden with a guessed CSS" in system
     assert "Use 'changes.md' as the source path" in user
     assert "not the example '<notes-filename>' or 'changes.md'" in user
 
