@@ -57,6 +57,7 @@ def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
     from core.check_summary import (
         build_summary,
         file_sha256,
+        format_plan_table,
         relabel_unselected,
         select_scenarios,
         write_summary_files,
@@ -179,7 +180,14 @@ def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
             budget=budget, planned_only=True,
         )
         write_summary_files(summary, out_dir)
-        print("(plan-only mode — no scenarios executed)")
+        print()
+        for line in format_plan_table(plan):
+            print(line)
+        if plan.coverage_suggestions:
+            print(f"\n  Not selected at {plan.depth} depth: {len(plan.coverage_suggestions)} idea(s) (see summary.md)")
+        print("\n(plan-only mode — no scenarios executed)")
+        print(f"Run all:     assay check --plan {plan_path}")
+        print(f"Run some:    assay check --plan {plan_path} --only <ID> [--only <ID> ...]")
         return 0, summary
 
     # ── --only: run a subset (plus prerequisites) of the saved plan ─────────
