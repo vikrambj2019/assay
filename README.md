@@ -88,6 +88,58 @@ pytest tests/test_plan.py tests/test_executor.py tests/test_budget.py \
 
 ---
 
+## From a fresh checkout to a full Driftline check
+
+This is the complete developer flow for the hosted synthetic Driftline demo.
+
+```bash
+git clone https://github.com/vikrambj2019/assay.git
+cd assay
+cp .env.example .env
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e ".[dev]"
+docker compose build
+```
+
+Set the model key and hosted Driftline values in `.env`:
+
+```env
+ASSAY_BASE_URL=https://driftline-demo.onrender.com/v/clean
+ASSAY_LOGIN_URL=https://driftline-demo.onrender.com/v/clean/login
+ASSAY_ALLOWED_ORIGINS=https://driftline-demo.onrender.com
+ASSAY_TEST_USERNAME=demo@example.com
+ASSAY_TEST_PASSWORD=demo1234
+ASSAY_ALLOW_MUTATIONS=true
+```
+
+Create change notes, then run the full check with browser recording:
+
+```bash
+cat > changes.md <<'EOF'
+# Profile editing
+- A signed-in user can update their phone number.
+- Saving shows a success message.
+- Reloading keeps the new phone number.
+- Invalid values show a visible validation error.
+EOF
+
+assay check --notes changes.md --readme README.md --diff main \
+  --depth high --record-video --output results/driftline-check
+```
+
+Open `results/driftline-check/summary.md`, `report.html`, and the
+scenario-level `video.webm` files in VS Code. The Docker equivalent is:
+
+```bash
+docker compose run --rm agent check --notes changes.md --readme README.md \
+  --diff main --depth high --record-video \
+  --output /app/results/driftline-check
+```
+
+---
+
 ## `assay check` — pre-PR browser check
 
 One command reads your changes, generates a bounded test plan, executes it in
