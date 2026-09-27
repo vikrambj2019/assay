@@ -8,6 +8,7 @@ exercised without touching the Anthropic API.
 from __future__ import annotations
 
 import json
+import inspect
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,14 @@ from core.planner import (
     run_planner,
 )
 from core.planner import _build_system_prompt, _build_user_message
+
+
+def test_anthropic_adapter_default_budget_handles_check_rich_plans():
+    """The default response budget must fit medium plans with checks."""
+    default = inspect.signature(AnthropicPlannerAdapter.__init__).parameters[
+        "max_tokens"
+    ].default
+    assert default == 8192
 
 
 def test_anthropic_adapter_skips_thinking_blocks(monkeypatch):

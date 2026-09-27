@@ -100,7 +100,7 @@ _SCHEMA_SKELETON = """\
       ],
       "requires_mutations": false,
       "reason": "Why this scenario is included",
-      "source": {"kind": "notes", "path": "changes.md", "excerpt": "motivating excerpt"},
+      "source": {"kind": "notes", "path": "<notes-filename>", "excerpt": "motivating excerpt"},
       "skip": false
     }
   ],
@@ -146,6 +146,10 @@ def _build_system_prompt(policy: DepthPolicy, depth: str) -> str:
            When a requirement names exact visible text or a URL, always
            populate check with the matching type. Use null only when no
            deterministic check is possible.
+        9. The prerequisites array contains scenario IDs only (for example
+           ["s-001"]), never titles, descriptions, or natural-language text.
+           Every prerequisite must exactly match an id in the same scenarios
+           array. Use [] when there is no dependency.
 
         Output ONLY a single valid JSON object. Do not include markdown fences,
         prose, or any text outside the JSON object.
@@ -278,7 +282,8 @@ def run_planner(
     # Exactly one repair attempt — explain the error so the model can fix it.
     repair_user = (
         f"Your previous response failed validation with this error:\n\n{first_exc}\n\n"
-        "Please output a corrected JSON object only. "
+        "Prerequisites must be existing scenario IDs such as [\"s-001\"], "
+        "never scenario titles or prose. Output a corrected JSON object only. "
         "Do not include markdown fences or any text outside the JSON."
     )
     try:
@@ -304,7 +309,7 @@ class AnthropicPlannerAdapter:
     def __init__(
         self,
         model: str = "claude-sonnet-5",
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
         api_key: str | None = None,
     ) -> None:
         try:
