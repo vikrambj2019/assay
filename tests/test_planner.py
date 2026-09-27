@@ -15,11 +15,47 @@ import pytest
 from core.context import CheckContext
 from core.plan import SCHEMA_VERSION, Plan
 from core.planner import (
+    AnthropicPlannerAdapter,
     DEPTH_POLICIES,
     DepthPolicy,
     PlanningError,
     run_planner,
 )
+
+
+def test_anthropic_adapter_skips_thinking_blocks(monkeypatch):
+    """Extended-thinking content must not crash planner response extraction."""
+    class Thinking:
+        pass
+
+    class Text:
+        text = '{"plan": "ok"}'
+
+    class Messages:
+        def create(self, **kwargs):
+            return type("Response", (), {"content": [Thinking(), Text()]})()
+
+    adapter = object.__new__(AnthropicPlannerAdapter)
+    adapter._client = type("Client", (), {"messages": Messages()})()
+    adapter._model = "test"
+    adapter._max_tokens = 10
+    assert adapter.complete("system", "user") == '{"plan": "ok"}'
+
+
+def test_anthropic_adapter_requires_text_block():
+    class Thinking:
+        pass
+
+    class Messages:
+        def create(self, **kwargs):
+            return type("Response", (), {"content": [Thinking()]})()
+
+    adapter = object.__new__(AnthropicPlannerAdapter)
+    adapter._client = type("Client", (), {"messages": Messages()})()
+    adapter._model = "test"
+    adapter._max_tokens = 10
+    with pytest.raises(ValueError, match="No text block"):
+        adapter.complete("system", "user")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

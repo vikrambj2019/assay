@@ -310,4 +310,9 @@ class AnthropicPlannerAdapter:
             system=system,
             messages=[{"role": "user", "content": user}],
         )
-        return msg.content[0].text
+        # Extended-thinking responses can put ThinkingBlock entries before the
+        # actual text response. Only text blocks are valid planner output.
+        for block in msg.content:
+            if hasattr(block, "text"):
+                return block.text
+        raise ValueError("No text block found in planner response")
