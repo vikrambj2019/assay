@@ -43,7 +43,7 @@ DEPTH_POLICIES: dict[str, DepthPolicy] = {
     ),
     "medium": DepthPolicy(
         max_scenarios=8,
-        max_actions=150,
+        max_actions=200,
         max_seconds=600,
         emphasis="Low plus invalid input, persistence, adjacent regressions",
     ),
@@ -159,6 +159,9 @@ def _build_system_prompt(policy: DepthPolicy, depth: str) -> str:
             that creates the state: perform the action, verify the outcome,
             reload, and verify persistence. Do not create a separate cold-start
             persistence scenario that depends on the booking scenario.
+        11. Schedule the primary end-to-end booking or checkout scenario early
+            in the plan, after only the prerequisites it truly needs. Do not
+            spend the entire action budget on small exploratory scenarios first.
 
         Output ONLY a single valid JSON object. Do not include markdown fences,
         prose, or any text outside the JSON object.

@@ -78,6 +78,7 @@ def test_prompt_teaches_deterministic_check_types_and_notes_path():
     assert '"type": "persistence"' in system
     assert "Do not use element_visible, element_hidden, or field_value" in system
     assert "Keep persistence verification in the same scenario" in system
+    assert "Schedule the primary end-to-end booking" in system
     assert "Use 'changes.md' as the source path" in user
     assert "not the example '<notes-filename>' or 'changes.md'" in user
 
@@ -196,7 +197,7 @@ def test_depth_policy_low_values():
 def test_depth_policy_medium_values():
     p = DEPTH_POLICIES["medium"]
     assert p.max_scenarios == 8
-    assert p.max_actions == 150
+    assert p.max_actions == 200
     assert p.max_seconds == 600
 
 

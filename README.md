@@ -299,7 +299,7 @@ Do not commit `.env` — it contains credentials. The file is listed in `.gitign
 | Depth  | Max scenarios | Max actions | Max seconds | Coverage emphasis |
 |--------|----------:|----------:|----------:|---|
 | low    | 3  | 40  | 180   | Changed feature happy path and essential smoke checks |
-| medium | 8  | 150 | 600   | Low plus invalid input, persistence, adjacent regressions |
+| medium | 8  | 200 | 600   | Low plus invalid input, persistence, adjacent regressions |
 | high   | 15 | 200 | 1 200 | Medium plus boundary cases and selected repeatability checks |
 
 Override any limit with `--max-seconds`, `--max-actions`, or `--max-cost-usd`.

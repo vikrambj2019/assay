@@ -36,6 +36,16 @@ class BrowserScenarioAdapter:
         errors = [log.reason for log in logs if log.verdict is Verdict.ERROR]
         if errors:
             raise RuntimeError("; ".join(errors))
+        final = logs[-1] if logs else None
+        if final is not None and final.verdict is Verdict.FAIL:
+            text = final.reason.lower()
+            timeout_markers = ("time limit exceeded", "time limit", "timed out",
+                               "timeout", "time limit exceeded")
+            if any(marker in text for marker in timeout_markers):
+                raise RuntimeError(
+                    "browser agent appears hung: repeated tool timeout while "
+                    f"executing scenario ({final.reason})"
+                )
 
     async def assess_assertion(self, assertion: Assertion) -> AssertionOutcome:
         """Use the page-grounded agent assessment for semantic assertions."""
