@@ -44,13 +44,13 @@ DEPTH_POLICIES: dict[str, DepthPolicy] = {
     "medium": DepthPolicy(
         max_scenarios=8,
         max_actions=200,
-        max_seconds=600,
+        max_seconds=900,
         emphasis="Low plus invalid input, persistence, adjacent regressions",
     ),
     "high": DepthPolicy(
         max_scenarios=15,
         max_actions=300,
-        max_seconds=1200,
+        max_seconds=1800,
         emphasis="Medium plus boundary cases and selected repeatability checks",
     ),
 }

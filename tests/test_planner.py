@@ -208,14 +208,14 @@ def test_depth_policy_medium_values():
     p = DEPTH_POLICIES["medium"]
     assert p.max_scenarios == 8
     assert p.max_actions == 200
-    assert p.max_seconds == 600
+    assert p.max_seconds == 900
 
 
 def test_depth_policy_high_values():
     p = DEPTH_POLICIES["high"]
     assert p.max_scenarios == 15
     assert p.max_actions == 300
-    assert p.max_seconds == 1200
+    assert p.max_seconds == 1800
 
 
 def test_depth_policy_emphasis_strings_not_empty():

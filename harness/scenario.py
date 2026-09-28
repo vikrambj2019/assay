@@ -11,6 +11,7 @@ from core.config import Config
 from core.plan import Scenario
 from core.plan import Assertion
 from core.assertions import AssertionOutcome
+from core.auth import resolve_auth_setup, verify_authenticated, AuthMode
 from core.settle import settle
 from core.schema import Verdict
 from harness.agent import run_goal
@@ -123,4 +124,32 @@ class BrowserScenarioAdapterFactory:
         if scenario_cfg.record_video:
             scenario_cfg.record_video_dir = scenario_dir
         session = await BrowserSession(scenario_cfg).start()
+        await _prepare_authenticated_session(session, scenario_cfg)
         return BrowserScenarioAdapter(session, scenario_cfg, scenario_dir, self.budget)
+
+
+async def _prepare_authenticated_session(session: BrowserSession, cfg: Config) -> None:
+    """Log in before handing a credentialed browser session to the agent.
+
+    Credentials are used only by Playwright here and never enter the agent
+    prompt or transcript. Storage-state authentication is already applied by
+    BrowserSession.start().
+    """
+    setup = resolve_auth_setup(cfg)
+    if setup.mode is not AuthMode.CREDENTIALS:
+        return
+    if session.page is None:
+        raise RuntimeError("authentication setup failed: browser page unavailable")
+    if not cfg.login_url:
+        raise RuntimeError("credentials configured but ASSAY_LOGIN_URL is empty")
+    await session.page.goto(cfg.login_url)
+    username = session.page.locator(
+        "input[type='email'], input[name*='user' i], input[name*='email' i]"
+    ).first
+    password = session.page.locator("input[type='password']").first
+    await username.fill(cfg.test_username)
+    await password.fill(cfg.test_password)
+    await session.page.locator("button[type='submit'], input[type='submit']").first.click()
+    result = await verify_authenticated(session, cfg.login_url)
+    if result.status != "pass":
+        raise RuntimeError(f"credential authentication {result.status}: {result.reason}")
