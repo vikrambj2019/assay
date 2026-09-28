@@ -247,9 +247,30 @@ def _apply_depth_cap(plan: Plan, policy: DepthPolicy) -> Plan:
     )
 
 
-def _parse_and_validate(raw: str, depth: str, policy: DepthPolicy) -> Plan:
+def _ground_selector_checks(plan: Plan, ctx: CheckContext) -> Plan:
+    """Drop selector checks whose selectors are absent from supplied context.
+
+    The planner has no DOM access. A guessed selector must never become a
+    machine-verifiable failure; semantic assertion evaluation can still use the
+    executor agent's page-grounded assessment.
+    """
+    context = "\n".join(filter(None, (ctx.notes_text, ctx.readme_text, ctx.diff_text)))
+    selector_types = {"element_visible", "element_hidden", "field_value"}
+    for scenario in plan.scenarios:
+        for assertion in scenario.assertions:
+            check = assertion.check
+            if not isinstance(check, dict) or check.get("type") not in selector_types:
+                continue
+            selector = check.get("selector")
+            if not isinstance(selector, str) or selector not in context:
+                assertion.check = None
+    return plan
+
+
+def _parse_and_validate(raw: str, depth: str, policy: DepthPolicy, ctx: CheckContext) -> Plan:
     plan = _parse_response(raw, depth)
     plan = _apply_depth_cap(plan, policy)
+    plan = _ground_selector_checks(plan, ctx)
     validate_plan(plan)
     return plan
 
@@ -287,7 +308,7 @@ def run_planner(
 
     first_exc: Exception | None = None
     try:
-        return _parse_and_validate(raw, depth, policy)
+        return _parse_and_validate(raw, depth, policy, ctx)
     except Exception as exc:
         first_exc = exc
 
@@ -300,7 +321,7 @@ def run_planner(
     )
     try:
         raw2 = adapter.complete(system, repair_user)
-        return _parse_and_validate(raw2, depth, policy)
+        return _parse_and_validate(raw2, depth, policy, ctx)
     except Exception as repair_exc:
         raise PlanningError(
             f"Planning failed after repair attempt.\n"

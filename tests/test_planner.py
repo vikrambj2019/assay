@@ -91,6 +91,16 @@ def test_prompt_uses_actual_notes_filename():
     assert "Use 'driftline-booking-flow.md' as the source path" in user
 
 
+def test_ungrounded_selector_checks_are_removed_before_validation():
+    data = json.loads(_plan_json(1))
+    data["scenarios"][0]["assertions"][0]["check"] = {
+        "type": "element_visible", "selector": ".invented-selector"
+    }
+    adapter = FakeAdapter([json.dumps(data)])
+    plan = run_planner(_make_context(), "medium", adapter)
+    assert plan.scenarios[0].assertions[0].check is None
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 _SENTINEL = object()  # distinguishes "caller passed None" from "caller didn't pass"
