@@ -99,7 +99,7 @@ class RunBudget:
 
     Usage::
 
-        budget = RunBudget(BudgetConfig(max_seconds=600, max_actions=100))
+        budget = RunBudget(BudgetConfig(max_seconds=600, max_actions=150))
         budget.start()
         # … before each browser action …
         budget.record_action()   # increments counter and checks limits

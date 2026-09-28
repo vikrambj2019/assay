@@ -380,19 +380,19 @@ def test_budget_from_depth_low_presets():
 def test_budget_from_depth_medium_presets():
     budget = budget_from_depth("medium")
     assert budget._config.max_seconds == 600
-    assert budget._config.max_actions == 100
+    assert budget._config.max_actions == 150
 
 
 def test_budget_from_depth_high_presets():
     budget = budget_from_depth("high")
     assert budget._config.max_seconds == 1200
-    assert budget._config.max_actions == 200
+    assert budget._config.max_actions == 300
 
 
 def test_budget_from_depth_override_seconds():
     budget = budget_from_depth("medium", max_seconds=999)
     assert budget._config.max_seconds == 999
-    assert budget._config.max_actions == 100  # preset unchanged
+    assert budget._config.max_actions == 150  # preset unchanged
 
 
 def test_budget_from_depth_override_actions():

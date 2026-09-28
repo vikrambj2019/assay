@@ -43,13 +43,13 @@ DEPTH_POLICIES: dict[str, DepthPolicy] = {
     ),
     "medium": DepthPolicy(
         max_scenarios=8,
-        max_actions=100,
+        max_actions=150,
         max_seconds=600,
         emphasis="Low plus invalid input, persistence, adjacent regressions",
     ),
     "high": DepthPolicy(
         max_scenarios=15,
-        max_actions=200,
+        max_actions=300,
         max_seconds=1200,
         emphasis="Medium plus boundary cases and selected repeatability checks",
     ),
@@ -146,14 +146,19 @@ def _build_system_prompt(policy: DepthPolicy, depth: str) -> str:
            When a requirement names exact visible text or a URL, always
            populate check with the matching type. Use null only when no
            deterministic check is possible.
-           Do not use element_visible or element_hidden with a guessed CSS
-           selector. Use those checks only when the selector appears verbatim
-           in the notes, README, or diff; otherwise prefer text_visible,
-           text_absent, or a model-evaluated assertion.
+           Do not use element_visible, element_hidden, or field_value with a
+           guessed CSS selector. Use those checks only when the selector
+           appears verbatim in the notes, README, or diff. For input or promo
+           confirmation, prefer text_visible (for example, a confirmation
+           message) instead of field_value.
         9. The prerequisites array contains scenario IDs only (for example
            ["s-001"]), never titles, descriptions, or natural-language text.
            Every prerequisite must exactly match an id in the same scenarios
            array. Use [] when there is no dependency.
+        10. Keep persistence verification in the same scenario as the action
+            that creates the state: perform the action, verify the outcome,
+            reload, and verify persistence. Do not create a separate cold-start
+            persistence scenario that depends on the booking scenario.
 
         Output ONLY a single valid JSON object. Do not include markdown fences,
         prose, or any text outside the JSON object.

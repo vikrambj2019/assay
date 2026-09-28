@@ -61,7 +61,7 @@ These are initial configurable budgets, not performance guarantees. Depth does n
 | Depth | Max scenarios | Max actions across the run | Max seconds across the run | Coverage emphasis |
 | --- | ---: | ---: | ---: | --- |
 | low | 3 | 40 | 180 | Changed feature happy path and essential smoke checks |
-| medium | 8 | 100 | 600 | Low plus invalid input, persistence, adjacent regressions |
+| medium | 8 | 150 | 600 | Low plus invalid input, persistence, adjacent regressions |
 | high | 15 | 200 | 1200 | Medium plus boundary cases and selected repeatability checks |
 
 Initial execution is sequential to avoid shared backend-data races. High depth still uses one identity, browser, and viewport in this release. Track unselected coverage suggestions separately from planned scenarios.

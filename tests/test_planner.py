@@ -76,7 +76,8 @@ def test_prompt_teaches_deterministic_check_types_and_notes_path():
     assert '"check": {"type": "text_visible"' in system
     assert '"type": "url_contains"' in system
     assert '"type": "persistence"' in system
-    assert "Do not use element_visible or element_hidden with a guessed CSS" in system
+    assert "Do not use element_visible, element_hidden, or field_value" in system
+    assert "Keep persistence verification in the same scenario" in system
     assert "Use 'changes.md' as the source path" in user
     assert "not the example '<notes-filename>' or 'changes.md'" in user
 
@@ -195,14 +196,14 @@ def test_depth_policy_low_values():
 def test_depth_policy_medium_values():
     p = DEPTH_POLICIES["medium"]
     assert p.max_scenarios == 8
-    assert p.max_actions == 100
+    assert p.max_actions == 150
     assert p.max_seconds == 600
 
 
 def test_depth_policy_high_values():
     p = DEPTH_POLICIES["high"]
     assert p.max_scenarios == 15
-    assert p.max_actions == 200
+    assert p.max_actions == 300
     assert p.max_seconds == 1200
 
 
