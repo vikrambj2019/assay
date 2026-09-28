@@ -79,6 +79,7 @@ def test_prompt_teaches_deterministic_check_types_and_notes_path():
     assert "Do not use element_visible, element_hidden, or field_value" in system
     assert "Keep persistence verification in the same scenario" in system
     assert "Schedule the primary end-to-end booking" in system
+    assert "Deterministic checks run after the entire scenario goal completes" in system
     assert "Use 'changes.md' as the source path" in user
     assert "not the example '<notes-filename>' or 'changes.md'" in user
 
