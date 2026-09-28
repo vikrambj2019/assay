@@ -316,6 +316,26 @@ Depth does not change `ASSAY_EFFORT`.
 Unsupported MFA or CAPTCHA becomes `BLOCKED`, not `PASS`. Uncertain login state
 becomes `UNVERIFIED`. Neither ever silently passes.
 
+### Assertion verification and checkpoints
+
+Every assertion is evaluated independently. A goal-level agent PASS does not
+satisfy an assertion. Assertions without a supported deterministic `check`
+remain UNVERIFIED, including ambiguous business rules.
+
+Checks default to `"timing": "final"` for compatibility with existing plans.
+For an intermediate state, such as an error shown before correcting a form,
+use `"timing": "checkpoint"`. The agent receives the full frozen assertions
+and calls `verify_assertion(assertion_id)` while that state is present. The
+harness computes the result against the browser; the agent cannot supply a
+verdict or change the check. A missing checkpoint is UNVERIFIED. Repeating a
+checkpoint returns its original result, so a later success cannot erase a failure.
+
+`results.json` retains per-assertion verdicts, evaluator types, observed values,
+URLs, screenshot paths, action IDs, and stage console/network evidence.
+`report.html` links the screenshots and displays each assertion result.
+Screenshot capture failure is represented by a null path and does not fabricate
+an image. Screenshots may contain sensitive page data; review before sharing.
+
 ### Output artifacts
 
 These files are written to `results/check/` (or `--output DIR`) on every run, including partial runs:
@@ -395,6 +415,25 @@ print('False positives:', report.false_positive_count)
 print('Ambiguous (UNVERIFIED):', report.ambiguous_unverified_count)
 "
 ```
+
+### Paired live-model evaluation (opt-in)
+
+```bash
+ASSAY_EVAL_LIVE=1 python -m fixture.eval.runner --runs 3 \
+  --model-version "$ASSAY_MODEL" --output results/live-eval
+```
+
+Set `ANTHROPIC_API_KEY` and `ASSAY_MODEL` first. This incurs model charges.
+The runner starts fresh local fixture variants, plans from neutral requirements,
+and executes the same frozen plan against clean and broken versions at the same
+URL. It repeats each pair and saves reports plus browser evidence. Ground-truth
+bug labels and detection checks are not sent to the planner. A detection requires
+a clean PASS and a broken FAIL. The reported cost covers executor SDK usage;
+planner API charges are not yet included. Mocked evaluation tests assertion
+logic only and must not be presented as agent detection accuracy.
+
+The manually dispatched CI live-evaluation job runs this paired evaluator and
+uploads its artifacts; ordinary PR CI does not call a paid model.
 
 ### Browser demo (requires Anthropic API key)
 

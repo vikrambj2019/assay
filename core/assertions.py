@@ -7,9 +7,8 @@ checks against a live (or fake) browser page via an injectable
 Playwright.
 
 When an assertion has no ``check`` spec the result is UNVERIFIED:
-undefined business rules must not be silently passed.  The model is cited
-as the evaluator in the reason string so reports are honest about what
-was machine-verified vs. model-inferred.
+undefined business rules must not be silently passed. No model verdict can
+substitute for a missing deterministic check.
 
 Supported check types
 ---------------------
@@ -71,6 +70,10 @@ class AssertionOutcome:
     verdict: Verdict
     reason: str
     evidence: str = ""   # observed value or relevant excerpt; "" = not applicable
+    evaluator: str = "deterministic"
+    url: str = ""
+    screenshot: str | None = None
+    action_ids: list[int] = field(default_factory=list)
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
@@ -82,8 +85,7 @@ async def evaluate_assertion(
     """Evaluate *assertion* against the current browser state.
 
     If the assertion has a ``check`` spec → run the deterministic check.
-    Otherwise → UNVERIFIED with an explanation that result is model-
-    evaluated; undefined business rules must not be silently passed.
+    Otherwise → UNVERIFIED; undefined business rules must not be silently passed.
 
     The assertion kind (required / assumption / exploratory) does not
     affect how the check is run — it affects how the scenario verdict is
@@ -102,9 +104,10 @@ async def evaluate_assertion(
             verdict=Verdict.UNVERIFIED,
             reason=(
                 f"assertion {assertion.id!r} has no deterministic check spec — "
-                f"result is model-evaluated: {assertion.description!r}; "
+                f"not machine-verified: {assertion.description!r}; "
                 f"undefined business rules are UNVERIFIED"
             ),
+            evaluator="unverified",
         )
     return await _dispatch(assertion, adapter)
 
@@ -172,7 +175,7 @@ async def _text_visible(
     return AssertionOutcome(
         aid, Verdict.FAIL,
         f"text {text!r} is not visible on page",
-        "",
+        page[:2000],
     )
 
 
@@ -267,5 +270,5 @@ async def _persistence(
     return AssertionOutcome(
         aid, Verdict.FAIL,
         f"text {text!r} was lost after page reload — persistence defect",
-        "",
+        page_after[:2000],
     )

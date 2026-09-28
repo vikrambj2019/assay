@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import replace
+from dataclasses import replace, asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -259,6 +259,7 @@ def build_summary(
 
     doc["scenarios"] = [
         {"id": r.scenario_id, "title": r.scenario_title, "verdict": r.verdict.value,
+         "assertion_results": [asdict(o) for o in r.assertion_outcomes],
          "video": _video(out_dir, r.scenario_id)}
         for r in run_result.scenario_results
     ]

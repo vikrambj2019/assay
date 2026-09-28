@@ -73,8 +73,10 @@ class Assertion:
 
     The optional ``check`` field encodes a deterministic, machine-verifiable
     check specification so the executor can verify the assertion without an
-    LLM call.  When absent the assertion is evaluated semantically (model-
-    evaluated, result is UNVERIFIED unless the agent reports otherwise).
+    LLM call. When absent, the assertion remains UNVERIFIED. Overall agent
+    verdicts never substitute for assertion-specific verification.
+    timing="checkpoint" runs the check explicitly within the browser flow;
+    timing="final" (default) runs it after the scenario completes.
 
     Supported check types::
 
@@ -91,6 +93,7 @@ class Assertion:
     kind: AssertionKind
     source: "SourceRef | None" = None  # mandatory when kind is REQUIRED
     check: "dict | None" = None        # optional deterministic check spec
+    timing: str = "final"             # final page or explicit in-flow checkpoint
 
     def to_dict(self) -> dict:
         return {
@@ -99,6 +102,7 @@ class Assertion:
             "kind": self.kind.value,
             "source": self.source.to_dict() if self.source else None,
             "check": self.check,
+            "timing": self.timing,
         }
 
     @classmethod
@@ -109,6 +113,7 @@ class Assertion:
             kind=AssertionKind(d["kind"]),
             source=SourceRef.from_dict(d["source"]) if d.get("source") else None,
             check=d.get("check"),
+            timing=d.get("timing", "final"),
         )
 
 
@@ -281,6 +286,8 @@ def validate_plan(plan: Plan) -> None:
             elif a.id in assertion_ids:
                 errors.append(f"scenario {s.id!r}: duplicate assertion ID {a.id!r}")
             assertion_ids.add(a.id)
+            if a.timing not in ("final", "checkpoint"):
+                errors.append(f"assertion {a.id!r}: timing must be final or checkpoint")
             if not isinstance(a.description, str) or not a.description.strip():
                 errors.append(f"scenario {s.id!r}, assertion {a.id!r}: description must be non-empty")
             if not isinstance(a.kind, AssertionKind):
