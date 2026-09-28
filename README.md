@@ -378,6 +378,15 @@ The canonical demo notes are in [`examples/shop-change.md`](examples/shop-change
 The roadmap for the demo, agent skill, machine-readable output, and videos is
 in [`docs/PUBLIC_DEMO_AND_AGENT_PLAN.md`](docs/PUBLIC_DEMO_AND_AGENT_PLAN.md).
 
+### Lightweight codebase understanding (next open item)
+
+Assay currently plans from behavioral notes, the README, and an optional diff.
+The next planned capability is a bounded codebase-understanding pass that maps
+entry points, routes, forms, authentication, persistence, and existing fixtures
+before planning. It will provide inferred context to the planner while keeping
+the developer's notes as the source of required behavior. The design is in
+[`docs/CODEBASE_UNDERSTANDING_PLAN.md`](docs/CODEBASE_UNDERSTANDING_PLAN.md).
+
 ### Mocked evaluation (no API key, no browser)
 
 ```bash
