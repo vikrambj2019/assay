@@ -137,6 +137,16 @@ class BrowserSession:
         self._context.on("page", self._adopt_page)  # follow popups / new tabs
         return self
 
+    async def current_url(self) -> str:
+        """Return the active page URL for authentication verification."""
+        return self.page.url if self.page is not None else ""
+
+    async def page_text(self) -> str:
+        """Return visible body text for authentication verification."""
+        if self.page is None:
+            return ""
+        return await self.page.locator("body").inner_text()
+
     def _setup_page(self, page: Page) -> None:
         page.set_default_timeout(self.config.action_timeout_ms)
         page.set_default_navigation_timeout(self.config.nav_timeout_ms)
