@@ -9,6 +9,8 @@ from core.browser import BrowserSession
 from core.budget import RunBudget
 from core.config import Config
 from core.plan import Scenario
+from core.plan import Assertion
+from core.assertions import AssertionOutcome
 from core.settle import settle
 from core.schema import Verdict
 from harness.agent import run_goal
@@ -23,15 +25,41 @@ class BrowserScenarioAdapter:
         self.cfg = cfg
         self.out_dir = out_dir
         self.budget = budget
+        self._goal_logs = []
 
     async def run_goal(self, scenario: Scenario) -> None:
         logs = await run_goal(
             self.session, scenario.goal, self.cfg, self.out_dir,
             budget=self.budget,
         )
+        self._goal_logs = logs
         errors = [log.reason for log in logs if log.verdict is Verdict.ERROR]
         if errors:
             raise RuntimeError("; ".join(errors))
+
+    async def assess_assertion(self, assertion: Assertion) -> AssertionOutcome:
+        """Use the page-grounded agent assessment for semantic assertions."""
+        if not self._goal_logs:
+            return AssertionOutcome(
+                assertion.id, Verdict.UNVERIFIED,
+                "no agent assessment was recorded for this assertion",
+            )
+        final = self._goal_logs[-1]
+        if final.verdict is Verdict.PASS:
+            return AssertionOutcome(
+                assertion.id, Verdict.PASS,
+                f"agent assessment: {final.reason}", final.reason,
+            )
+        if final.verdict is Verdict.FAIL:
+            return AssertionOutcome(
+                assertion.id, Verdict.FAIL,
+                f"agent assessment: {final.reason}", final.reason,
+            )
+        return AssertionOutcome(
+            assertion.id, Verdict.UNVERIFIED,
+            f"agent assessment was {final.verdict.value}: {final.reason}",
+            final.reason,
+        )
 
     async def current_url(self) -> str:
         return self.session.page.url if self.session.page is not None else ""

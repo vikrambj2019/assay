@@ -85,6 +85,20 @@ class FakeScenarioAdapter(FakeAssertionCheckerAdapter):
             raise self._goal_raises
 
 
+class AssessedScenarioAdapter(FakeScenarioAdapter):
+    def __init__(self, assessed: Verdict, reason: str = "page confirms outcome", **kwargs):
+        super().__init__(**kwargs)
+        self._assessed = assessed
+        self._assessment_reason = reason
+
+    async def assess_assertion(self, assertion):
+        return AssertionOutcome(
+            assertion.id, self._assessed,
+            f"agent assessment: {self._assessment_reason}",
+            self._assessment_reason,
+        )
+
+
 class FakeAdapterFactory:
     """Creates FakeScenarioAdapters from a {scenario_id: adapter} mapping."""
 
@@ -345,6 +359,25 @@ async def test_semantic_assertion_reason_mentions_model_evaluated():
     a = _req_assertion("a-1", check=None)
     outcome = await evaluate_assertion(a, adapter)
     assert "model-evaluated" in outcome.reason.lower() or "unverified" in outcome.reason.lower()
+
+
+@pytest.mark.asyncio
+async def test_executor_uses_agent_assessment_for_semantic_assertion():
+    s = _scenario("s-001", assertions=[_req_assertion("a-1", check=None)])
+    plan = make_plan("medium", [s])
+    adapter = AssessedScenarioAdapter(Verdict.PASS)
+    result = await run_plan(plan, _mp(), FakeAdapterFactory(default=adapter))
+    assert result.scenario_results[0].verdict is Verdict.PASS
+    assert result.scenario_results[0].assertion_evidence["a-1"] == "page confirms outcome"
+
+
+@pytest.mark.asyncio
+async def test_agent_assessment_fail_is_a_confirmed_failure():
+    s = _scenario("s-001", assertions=[_req_assertion("a-1", check=None)])
+    plan = make_plan("medium", [s])
+    adapter = AssessedScenarioAdapter(Verdict.FAIL, reason="required outcome absent")
+    result = await run_plan(plan, _mp(), FakeAdapterFactory(default=adapter))
+    assert result.scenario_results[0].verdict is Verdict.FAIL
 
 
 @pytest.mark.asyncio

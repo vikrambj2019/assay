@@ -59,6 +59,8 @@ class ScenarioAdapter(Protocol):
     async def is_element_visible(self, selector: str) -> bool: ...
     async def reload(self) -> None: ...
 
+    async def assess_assertion(self, assertion: Assertion) -> AssertionOutcome: ...
+
 
 class ScenarioAdapterFactory(Protocol):
     """Creates a fresh ScenarioAdapter for each scenario execution."""
@@ -274,7 +276,11 @@ async def _check_assertions(
     """Evaluate every assertion in *scenario* against the current browser state."""
     outcomes: list[AssertionOutcome] = []
     for assertion in scenario.assertions:
-        outcome = await evaluate_assertion(assertion, adapter)
+        assessor = getattr(adapter, "assess_assertion", None)
+        if assertion.check is None and assessor is not None:
+            outcome = await assessor(assertion)
+        else:
+            outcome = await evaluate_assertion(assertion, adapter)
         outcomes.append(outcome)
     return outcomes
 
