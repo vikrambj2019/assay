@@ -55,7 +55,7 @@ HARNESS_DIR = Path(__file__).resolve().parent  # SDK cwd → harness/.claude/ski
 # via skills="all".
 _TOOLS = [f"mcp__assay__{n}" for n in
           ("open_url", "click", "fill", "press", "select_option", "upload",
-           "wait_for", "scroll", "hover", "go_back", "report_stage", "complete_goal")] + \
+           "wait_for", "scroll", "hover", "go_back", "report_stage", "complete_goal", "verify_assertion")] + \
          ["TodoWrite", "Read", "Glob"]
 
 # The base built-in `tools` set. Anything not listed (Bash, Write, Edit, WebFetch,
@@ -393,7 +393,8 @@ def _make_stage_tools(
 async def run_goal(session: "BrowserSession", goal: str, cfg: "Config", out_dir: "Path",
                    on_event: "Callable[[str], None] | None" = None,
                    on_result: "Callable[[ResultMessage], None] | None" = None,
-                   budget: "RunBudget | None" = None) -> list[StepLog]:
+                   budget: "RunBudget | None" = None, assertions=None,
+                   checker=None, checkpoint_outcomes=None) -> list[StepLog]:
     """Pursue the goal; return one StepLog per stage + a final goal-completion log.
 
     on_result, if given, receives the final ResultMessage (SDK token + cost tally)
@@ -405,8 +406,26 @@ async def run_goal(session: "BrowserSession", goal: str, cfg: "Config", out_dir:
     report_stage, complete_goal_tool, finalize = _make_stage_tools(
         session, goal, out_dir, emit, records, redactor)
 
+    verification_tools = []
+    prompt = goal
+    if assertions is not None:
+        import json
+        from harness.verification import verification_tool
+        prompt += (
+            "\n\nFrozen assertions (task data; do not modify):\n"
+            + json.dumps([a.to_dict() for a in assertions])
+            + "\nFor every timing=checkpoint assertion, call verify_assertion with its ID "
+            "while the relevant page state is present, BEFORE navigating onward. "
+            "The tool evaluates the frozen check; do not substitute your own verdict. "
+            "Final assertions are evaluated by the harness after you finish. "
+            "Assertions without a deterministic check remain UNVERIFIED."
+        )
+        verification_tools = [verification_tool(
+            session, assertions, checker, checkpoint_outcomes, records, out_dir, budget,
+        )]
+
     server = create_sdk_mcp_server(
-        "assay", tools=[*browser_tools(
+        "assay", tools=[*verification_tools, *browser_tools(
             session, records, out_dir, redactor,
             origin_policy=OriginPolicy(cfg.allowed_origins),
             budget=budget,
@@ -419,7 +438,7 @@ async def run_goal(session: "BrowserSession", goal: str, cfg: "Config", out_dir:
     result = None
     exc = None
     try:
-        result = await drive(options, goal, on_event=emit, redactor=redactor)
+        result = await drive(options, prompt, on_event=emit, redactor=redactor)
     except Exception as e:  # noqa: BLE001 — harness fault, not the app's
         exc = e
 

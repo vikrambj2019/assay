@@ -234,25 +234,40 @@ async def _execute_scenario(
             verdict=Verdict.ERROR,
             reason=f"scenario goal execution failed: {exc}",
             run_id=run_id,
+            stages=getattr(adapter, "execution_logs", lambda: [])(),
         )
 
     close_error: Exception | None = None
-    outcomes = await _check_assertions(scenario, adapter)
+    try:
+        outcomes = await _check_assertions(scenario, adapter)
+    except BudgetExhausted:
+        close = getattr(adapter, "close", None)
+        if close is not None:
+            try:
+                await close()
+            except Exception:
+                pass
+        raise
+    except Exception as exc:
+        outcomes = [AssertionOutcome(a.id, Verdict.ERROR,
+                    f"assertion evaluation interrupted: {exc}") for a in scenario.assertions]
     close = getattr(adapter, "close", None)
     if close is not None:
         try:
             await close()
         except Exception as exc:  # noqa: BLE001
             close_error = exc
-    if close_error is not None:
-        return ScenarioResult(
-            scenario_id=scenario.id,
-            scenario_title=scenario.title,
-            verdict=Verdict.ERROR,
-            reason=f"scenario cleanup failed: {close_error}",
-            run_id=run_id,
-        )
     verdict, reason = _scenario_verdict(outcomes, scenario.assertions)
+    status = getattr(adapter, "execution_status", None)
+    if verdict is Verdict.PASS and status is not None:
+        goal_verdict, goal_reason = status()
+        if goal_verdict is not Verdict.PASS:
+            verdict = Verdict.UNVERIFIED
+            reason = f"assertions passed but goal execution was {goal_verdict.value}: {goal_reason}"
+    if close_error is not None:
+        if verdict is not Verdict.FAIL:
+            verdict = Verdict.ERROR
+        reason += f"; scenario cleanup failed: {close_error}"
 
     return ScenarioResult(
         scenario_id=scenario.id,
@@ -260,6 +275,8 @@ async def _execute_scenario(
         verdict=verdict,
         reason=reason,
         run_id=run_id,
+        assertion_outcomes=outcomes,
+        stages=getattr(adapter, "execution_logs", lambda: [])(),
         assertions_checked=[o.assertion_id for o in outcomes],
         assertion_evidence={
             o.assertion_id: (o.evidence or o.reason)
@@ -276,11 +293,24 @@ async def _check_assertions(
     """Evaluate every assertion in *scenario* against the current browser state."""
     outcomes: list[AssertionOutcome] = []
     for assertion in scenario.assertions:
-        assessor = getattr(adapter, "assess_assertion", None)
-        if assertion.check is None and assessor is not None:
-            outcome = await assessor(assertion)
-        else:
-            outcome = await evaluate_assertion(assertion, adapter)
+        try:
+            assessor = getattr(adapter, "assess_assertion", None)
+            if assertion.timing == "checkpoint":
+                outcome = (await assessor(assertion) if assessor is not None else AssertionOutcome(
+                    assertion.id, Verdict.UNVERIFIED, "checkpoint evaluator unavailable",
+                    evaluator="unverified",
+                ))
+            else:
+                # Missing checks must not inherit a generic agent PASS.
+                outcome = await evaluate_assertion(assertion, adapter)
+                capture = getattr(adapter, "capture_assertion_evidence", None)
+                if capture is not None:
+                    outcome = await capture(assertion, outcome)
+        except BudgetExhausted:
+            raise
+        except Exception as exc:
+            outcome = AssertionOutcome(assertion.id, Verdict.ERROR,
+                                       f"assertion evaluation interrupted: {exc}")
         outcomes.append(outcome)
     return outcomes
 
