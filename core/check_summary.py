@@ -105,7 +105,45 @@ def relabel_unselected(run_result: "RunResult", unselected: list[str]) -> None:
             r.reason = NOT_SELECTED_REASON
 
 
+# ── Plan overview (what an agent shows the user before running) ──────────────
+
+def plan_overview(plan: Plan) -> list[dict[str, Any]]:
+    """One compact row per scenario, in plan order."""
+    rows = []
+    for s in plan.scenarios:
+        rows.append({
+            "id": s.id,
+            "title": s.title,
+            "requires_mutations": s.requires_mutations,
+            "prerequisites": list(s.prerequisites),
+            "assertions": len(s.assertions),
+            "source": s.source.kind if s.source else None,
+        })
+    return rows
+
+
+def format_plan_table(plan: Plan) -> list[str]:
+    """Human-readable scenario table for text mode."""
+    rows = plan_overview(plan)
+    if not rows:
+        return ["  (no scenarios)"]
+    id_w = max(len("ID"), *(len(r["id"]) for r in rows))
+    title_w = min(60, max(len("Scenario"), *(len(r["title"]) for r in rows)))
+    lines = [f"  {'ID':<{id_w}}  {'Scenario':<{title_w}}  Changes data  Depends on",
+             f"  {'-' * id_w}  {'-' * title_w}  ------------  ----------"]
+    for r in rows:
+        title = r["title"] if len(r["title"]) <= title_w else r["title"][: title_w - 1] + "…"
+        deps = ", ".join(r["prerequisites"]) or "-"
+        lines.append(f"  {r['id']:<{id_w}}  {title:<{title_w}}  {'yes' if r['requires_mutations'] else 'no':<12}  {deps}")
+    return lines
+
+
 # ── Summary construction ──────────────────────────────────────────────────────
+
+def _video(out_dir: Path, scenario_id: str) -> "str | None":
+    path = out_dir / scenario_id / "video.webm"
+    return str(path) if path.is_file() else None
+
 
 def _status_for(code: int) -> str:
     return {0: "pass", 1: "fail"}.get(code, "incomplete")
@@ -177,6 +215,8 @@ def build_summary(
     }
 
     if planned_only or run_result is None:
+        doc["scenarios"] = plan_overview(plan)
+        doc["coverage_suggestions"] = list(plan.coverage_suggestions)
         doc["artifacts"] = _artifact_map(out_dir, ["plan.json", "summary.json", "summary.md"])
         doc["rerun"] = _rerun_commands(plan_path, out_dir, [])
         return doc
@@ -205,6 +245,7 @@ def build_summary(
                 "title": r.scenario_title,
                 "reason": r.reason,
                 "assertions": assertions,
+                "video": _video(out_dir, r.scenario_id),
             })
         elif r.verdict in ATTENTION_HINTS and r.scenario_id not in unselected:
             doc["needs_attention"].append({
@@ -213,8 +254,14 @@ def build_summary(
                 "verdict": r.verdict.value,
                 "reason": r.reason,
                 "hint": ATTENTION_HINTS[r.verdict],
+                "video": _video(out_dir, r.scenario_id),
             })
 
+    doc["scenarios"] = [
+        {"id": r.scenario_id, "title": r.scenario_title, "verdict": r.verdict.value,
+         "video": _video(out_dir, r.scenario_id)}
+        for r in run_result.scenario_results
+    ]
     doc["artifacts"] = _artifact_map(
         out_dir, ["plan.json", "results.json", "report.html", "junit.xml", "summary.json", "summary.md"]
     )
@@ -262,7 +309,18 @@ def render_markdown(doc: dict[str, Any]) -> str:
         lines += [
             f"Plan written with {doc['plan']['scenario_count']} scenario(s) at `{doc['depth']}` depth; nothing was executed.",
             "",
+            "| ID | Scenario | Changes data | Depends on |",
+            "|---|---|---|---|",
         ]
+        for r in doc.get("scenarios") or []:
+            lines.append(
+                f"| `{r['id']}` | {_md(r['title'])} | {'yes' if r['requires_mutations'] else 'no'} | "
+                f"{', '.join(r['prerequisites']) or '-'} |"
+            )
+        if doc.get("coverage_suggestions"):
+            lines += ["", f"Not selected at this depth ({len(doc['coverage_suggestions'])}):"]
+            lines += [f"- {_md(c)}" for c in doc["coverage_suggestions"]]
+        lines.append("")
     else:
         counts = doc.get("counts") or {}
         cells = [f"{k} {v}" for k, v in counts.items() if k != "total"]
@@ -282,6 +340,8 @@ def render_markdown(doc: dict[str, Any]) -> str:
         lines += ["#### Failures", ""]
         for f in doc["failures"]:
             lines.append(f"- **{_md(f['title'])}** (`{f['scenario_id']}`): {_md(f['reason'])}")
+            if f.get("video"):
+                lines.append(f"  - recording: `{f['video']}`")
             for a in f["assertions"]:
                 if a.get("observed") is not None:
                     lines.append(f"  - expected: {_md(a['expected'])}; observed: {_md(a['observed'])}")

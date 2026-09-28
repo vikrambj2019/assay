@@ -240,3 +240,65 @@ def test_json_stdout_survives_noisy_adapters(tmp_path, capsys, monkeypatch):
     code, doc, err = _run_json(capsys, ["--plan", str(plan_path), "--output", str(tmp_path / "o")])
     assert code == 0 and doc["status"] == "pass"
     assert "transcript: clicking Save" in err
+
+
+# ── --plan-only: readable plan an agent can present before running ───────────
+
+def _patch_planner(monkeypatch, plan):
+    monkeypatch.setattr("core.planner.AnthropicPlannerAdapter", lambda **k: object())
+    monkeypatch.setattr("core.planner.run_planner", lambda ctx, depth, adapter: plan)
+
+
+def test_plan_only_json_lists_scenarios(tmp_path, capsys, monkeypatch):
+    notes = tmp_path / "README.md"
+    notes.write_text("# Driftline\n- Users can sign in.\n")
+    plan = make_plan("high", [_scenario("login"), _scenario("edit", ["login"])],
+                     coverage_suggestions=["Check the cookie banner"])
+    _patch_planner(monkeypatch, plan)
+    out_dir = tmp_path / "out"
+
+    code, doc, err = _run_json(capsys, ["--notes", str(notes), "--plan-only", "--output", str(out_dir)])
+
+    assert code == 0 and doc["status"] == "planned"
+    assert [s["id"] for s in doc["scenarios"]] == ["login", "edit"]
+    assert doc["scenarios"][1]["prerequisites"] == ["login"]
+    assert doc["coverage_suggestions"] == ["Check the cookie banner"]
+    assert doc["plan"]["source"] == "generated"
+    assert doc["rerun"]["all"].startswith("assay check --plan ")
+    md = (out_dir / "summary.md").read_text()
+    assert "| `edit` |" in md and "Check the cookie banner" in md
+
+
+def test_plan_only_text_prints_table(tmp_path, capsys, monkeypatch):
+    notes = tmp_path / "README.md"
+    notes.write_text("# x\n")
+    _patch_planner(monkeypatch, make_plan("low", [_scenario("login"), _scenario("edit", ["login"])]))
+    from harness.cli import main
+
+    code = main(["check", "--notes", str(notes), "--plan-only", "--output", str(tmp_path / "o")])
+    out, _ = capsys.readouterr()
+    assert code == 0
+    assert "Scenario login" in out and "Depends on" in out
+    assert "--only <ID>" in out
+
+
+def test_existing_generated_plan_requires_explicit_frozen_plan(tmp_path, capsys, monkeypatch):
+    notes = tmp_path / "README.md"
+    notes.write_text("# x\n- Users can sign in.\n")
+    _patch_planner(monkeypatch, make_plan("low", [_scenario("login")]))
+    out_dir = tmp_path / "out"
+
+    first = _run_json(capsys, ["--notes", str(notes), "--plan-only", "--output", str(out_dir)])
+    assert first[0] == 0
+    code, doc, err = _run_json(capsys, ["--notes", str(notes), "--output", str(out_dir)])
+    assert code == 2
+    assert doc["status"] == "invalid_input"
+    assert "use --plan" in doc["error"]
+    assert "already exists" in err
+
+
+def test_executed_summary_lists_verdicts(tmp_path, capsys, monkeypatch):
+    plan_path = _write_plan(tmp_path, _scenario("s1"))
+    _use_fake_browser(monkeypatch, {})
+    _, doc, _ = _run_json(capsys, ["--plan", str(plan_path), "--output", str(tmp_path / "o")])
+    assert doc["scenarios"] == [{"id": "s1", "title": "Scenario s1", "verdict": "PASS", "video": None}]

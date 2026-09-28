@@ -88,6 +88,58 @@ pytest tests/test_plan.py tests/test_executor.py tests/test_budget.py \
 
 ---
 
+## From a fresh checkout to a full Driftline check
+
+This is the complete developer flow for the hosted synthetic Driftline demo.
+
+```bash
+git clone https://github.com/vikrambj2019/assay.git
+cd assay
+cp .env.example .env
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e ".[dev]"
+docker compose build
+```
+
+Set the model key and hosted Driftline values in `.env`:
+
+```env
+ASSAY_BASE_URL=https://driftline-demo.onrender.com/v/clean
+ASSAY_LOGIN_URL=https://driftline-demo.onrender.com/v/clean/login
+ASSAY_ALLOWED_ORIGINS=https://driftline-demo.onrender.com
+ASSAY_TEST_USERNAME=demo@example.com
+ASSAY_TEST_PASSWORD=demo1234
+ASSAY_ALLOW_MUTATIONS=true
+```
+
+Create change notes, then run the full check with browser recording:
+
+```bash
+cat > changes.md <<'EOF'
+# Profile editing
+- A signed-in user can update their phone number.
+- Saving shows a success message.
+- Reloading keeps the new phone number.
+- Invalid values show a visible validation error.
+EOF
+
+assay check --notes changes.md --readme README.md --diff main \
+  --depth high --record-video --output results/driftline-check
+```
+
+Open `results/driftline-check/summary.md`, `report.html`, and the
+scenario-level `video.webm` files in VS Code. The Docker equivalent is:
+
+```bash
+docker compose run --rm agent check --notes changes.md --readme README.md \
+  --diff main --depth high --record-video \
+  --output /app/results/driftline-check
+```
+
+---
+
 ## `assay check` — pre-PR browser check
 
 One command reads your changes, generates a bounded test plan, executes it in
@@ -144,7 +196,8 @@ uncertainty visible.
 | `--url URL` | Application URL; overrides `ASSAY_BASE_URL`. |
 | `--output DIR` | Artifact directory (default `results/check`). |
 | `--format text\|json` | `json` prints one summary document to stdout and all logs to stderr. |
-| `--plan-only` | Write the plan without executing scenarios (planning still calls the model). |
+| `--plan-only` | Write the plan without executing scenarios (planning still calls the model). Prints a scenario table and the commands to run all or some of it. |
+| `--record-video` | Save a browser recording per scenario as `<output>/<scenario-id>/video.webm`, embedded in `report.html` (also `ASSAY_RECORD_VIDEO=true`). |
 | `--max-seconds`, `--max-actions`, `--max-cost-usd` | Override the depth budget. |
 
 ### For coding agents and CI
@@ -246,7 +299,7 @@ Do not commit `.env` — it contains credentials. The file is listed in `.gitign
 | Depth  | Max scenarios | Max actions | Max seconds | Coverage emphasis |
 |--------|----------:|----------:|----------:|---|
 | low    | 3  | 40  | 180   | Changed feature happy path and essential smoke checks |
-| medium | 8  | 100 | 600   | Low plus invalid input, persistence, adjacent regressions |
+| medium | 8  | 200 | 900   | Low plus invalid input, persistence, adjacent regressions |
 | high   | 15 | 200 | 1 200 | Medium plus boundary cases and selected repeatability checks |
 
 Override any limit with `--max-seconds`, `--max-actions`, or `--max-cost-usd`.
@@ -275,6 +328,7 @@ These files are written to `results/check/` (or `--output DIR`) on every run, in
 | `junit.xml` | JUnit XML | CI-compatible; BLOCKED/UNVERIFIED map to `<skipped>` with status in message |
 | `summary.json` | JSON (`assay.check.summary` v1) | Compact machine summary; identical to `--format json` stdout |
 | `summary.md` | Markdown | PR-ready summary: counts, failures with expected vs observed, items needing attention |
+| `<scenario-id>/video.webm` | WebM | Browser recording per scenario, only with `--record-video` |
 
 ### Artifact privacy
 
@@ -283,7 +337,7 @@ These files are written to `results/check/` (or `--output DIR`) on every run, in
 - Configured credentials (username, password, API keys) are redacted from all
   text artifacts before writing.
 - Application-sourced text in HTML reports is HTML-escaped.
-- Screenshots may capture sensitive on-screen data — review before sharing.
+- Screenshots and `--record-video` recordings may capture sensitive on-screen data — review before sharing.
 
 ### Exit codes
 

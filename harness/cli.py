@@ -57,6 +57,7 @@ def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
     from core.check_summary import (
         build_summary,
         file_sha256,
+        format_plan_table,
         relabel_unselected,
         select_scenarios,
         write_summary_files,
@@ -80,6 +81,8 @@ def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
             return _fail(str(e))
     if args.depth:
         cfg.depth = args.depth
+    if args.record_video:
+        cfg.record_video = True
     for flag, attr, value in (
         ("--max-seconds", "max_seconds", args.max_seconds),
         ("--max-actions", "max_actions", args.max_actions),
@@ -102,6 +105,15 @@ def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
         return _fail(str(e))
 
     out_dir = Path(args.output) if args.output else cfg.results_root / "check"
+
+    # A generated plan is the contract for execution. If an output directory
+    # already contains one, require an explicit --plan so a rerun cannot
+    # silently replace the expectations with a newly sampled LLM plan.
+    if args.notes and not args.plan_only and (out_dir / "plan.json").is_file():
+        return _fail(
+            f"{out_dir / 'plan.json'} already exists; use --plan {out_dir / 'plan.json'} "
+            "to execute the frozen plan, or choose a new --output directory"
+        )
 
     from core.budget import BudgetExhausted, budget_from_depth
     from core.plan import load_plan, save_plan
@@ -179,7 +191,14 @@ def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
             budget=budget, planned_only=True,
         )
         write_summary_files(summary, out_dir)
-        print("(plan-only mode — no scenarios executed)")
+        print()
+        for line in format_plan_table(plan):
+            print(line)
+        if plan.coverage_suggestions:
+            print(f"\n  Not selected at {plan.depth} depth: {len(plan.coverage_suggestions)} idea(s) (see summary.md)")
+        print("\n(plan-only mode — no scenarios executed)")
+        print(f"Run all:     assay check --plan {plan_path}")
+        print(f"Run some:    assay check --plan {plan_path} --only <ID> [--only <ID> ...]")
         return 0, summary
 
     # ── --only: run a subset (plus prerequisites) of the saved plan ─────────
@@ -331,6 +350,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_check.add_argument(
         "--max-cost-usd", type=float, default=None, metavar="F",
         help="override maximum cost in USD")
+    p_check.add_argument(
+        "--record-video", action="store_true", default=False,
+        help="save a browser recording per scenario as <output>/<scenario-id>/video.webm "
+             "(also ASSAY_RECORD_VIDEO=true); recordings may show sensitive data")
     p_check.add_argument(
         "--plan-only", action="store_true", default=False,
         help="generate and save plan.json without executing scenarios "

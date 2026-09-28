@@ -8,6 +8,7 @@ exercised without touching the Anthropic API.
 from __future__ import annotations
 
 import json
+import inspect
 from pathlib import Path
 
 import pytest
@@ -15,11 +16,90 @@ import pytest
 from core.context import CheckContext
 from core.plan import SCHEMA_VERSION, Plan
 from core.planner import (
+    AnthropicPlannerAdapter,
     DEPTH_POLICIES,
     DepthPolicy,
     PlanningError,
     run_planner,
 )
+from core.planner import _build_system_prompt, _build_user_message
+
+
+def test_anthropic_adapter_default_budget_handles_check_rich_plans():
+    """The default response budget must fit medium plans with checks."""
+    default = inspect.signature(AnthropicPlannerAdapter.__init__).parameters[
+        "max_tokens"
+    ].default
+    assert default == 8192
+
+
+def test_anthropic_adapter_skips_thinking_blocks(monkeypatch):
+    """Extended-thinking content must not crash planner response extraction."""
+    class Thinking:
+        pass
+
+    class Text:
+        text = '{"plan": "ok"}'
+
+    class Messages:
+        def create(self, **kwargs):
+            return type("Response", (), {"content": [Thinking(), Text()]})()
+
+    adapter = object.__new__(AnthropicPlannerAdapter)
+    adapter._client = type("Client", (), {"messages": Messages()})()
+    adapter._model = "test"
+    adapter._max_tokens = 10
+    assert adapter.complete("system", "user") == '{"plan": "ok"}'
+
+
+def test_anthropic_adapter_requires_text_block():
+    class Thinking:
+        pass
+
+    class Messages:
+        def create(self, **kwargs):
+            return type("Response", (), {"content": [Thinking()]})()
+
+    adapter = object.__new__(AnthropicPlannerAdapter)
+    adapter._client = type("Client", (), {"messages": Messages()})()
+    adapter._model = "test"
+    adapter._max_tokens = 10
+    with pytest.raises(ValueError, match="No text block"):
+        adapter.complete("system", "user")
+
+
+def test_prompt_teaches_deterministic_check_types_and_notes_path():
+    policy = DEPTH_POLICIES["medium"]
+    system = _build_system_prompt(policy, "medium")
+    ctx = _make_context()
+    user = _build_user_message(ctx, policy, "medium")
+    assert '"check": {"type": "text_visible"' in system
+    assert '"type": "url_contains"' in system
+    assert '"type": "persistence"' in system
+    assert "Do not use element_visible, element_hidden, or field_value" in system
+    assert "Keep persistence verification in the same scenario" in system
+    assert "Schedule the primary end-to-end booking" in system
+    assert "Deterministic checks run after the entire scenario goal completes" in system
+    assert "Use 'changes.md' as the source path" in user
+    assert "not the example '<notes-filename>' or 'changes.md'" in user
+
+
+def test_prompt_uses_actual_notes_filename():
+    policy = DEPTH_POLICIES["low"]
+    ctx = _make_context()
+    ctx.notes_path = Path("driftline-booking-flow.md")
+    user = _build_user_message(ctx, policy, "low")
+    assert "Use 'driftline-booking-flow.md' as the source path" in user
+
+
+def test_ungrounded_selector_checks_are_removed_before_validation():
+    data = json.loads(_plan_json(1))
+    data["scenarios"][0]["assertions"][0]["check"] = {
+        "type": "element_visible", "selector": ".invented-selector"
+    }
+    adapter = FakeAdapter([json.dumps(data)])
+    plan = run_planner(_make_context(), "medium", adapter)
+    assert plan.scenarios[0].assertions[0].check is None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -128,15 +208,15 @@ def test_depth_policy_low_values():
 def test_depth_policy_medium_values():
     p = DEPTH_POLICIES["medium"]
     assert p.max_scenarios == 8
-    assert p.max_actions == 100
-    assert p.max_seconds == 600
+    assert p.max_actions == 200
+    assert p.max_seconds == 900
 
 
 def test_depth_policy_high_values():
     p = DEPTH_POLICIES["high"]
     assert p.max_scenarios == 15
-    assert p.max_actions == 200
-    assert p.max_seconds == 1200
+    assert p.max_actions == 300
+    assert p.max_seconds == 1800
 
 
 def test_depth_policy_emphasis_strings_not_empty():

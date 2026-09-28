@@ -90,7 +90,10 @@ is advisory and complements unit and integration tests.
 - Use `--depth low` while iterating, `medium` before the PR, and `high` only
   when boundary and repeatability checks justify the time and cost.
 - Use `--plan-only` when you want to review the scenarios before any browser
-  interaction. Planning still calls the model.
+  interaction. Planning still calls the model. Show the user the scenario list from the
+  summary (`scenarios`) and ask whether to run all of it or only some
+  (`--plan … --only ID`).
+- Add `--record-video` when the user wants a recording of each scenario.
 - Do not paste secrets, auth-state contents, or `.env` values into notes or
   reports. Screenshots can contain sensitive data.
 

@@ -15,6 +15,7 @@ hooks and tracing for free.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from dataclasses import dataclass, field
 from types import TracebackType
 from urllib.parse import urlparse
@@ -118,14 +119,33 @@ class BrowserSession:
         # from a previous run carries over and the agent skips the login screen.
         ss = self.config.storage_state
         state = str(ss) if ss and ss.exists() else None
+        video_dir = getattr(self.config, "record_video_dir", None)
+        video_opts = {}
+        if video_dir is not None:
+            Path(video_dir).mkdir(parents=True, exist_ok=True)
+            video_opts = {
+                "record_video_dir": str(video_dir),
+                "record_video_size": {"width": 1280, "height": 720},
+            }
         self._context = await self._browser.new_context(
             storage_state=state,
             viewport={"width": 1920, "height": 1080},
+            **video_opts,
         )
         self.page = await self._context.new_page()
         self._setup_page(self.page)
         self._context.on("page", self._adopt_page)  # follow popups / new tabs
         return self
+
+    async def current_url(self) -> str:
+        """Return the active page URL for authentication verification."""
+        return self.page.url if self.page is not None else ""
+
+    async def page_text(self) -> str:
+        """Return visible body text for authentication verification."""
+        if self.page is None:
+            return ""
+        return await self.page.locator("body").inner_text()
 
     def _setup_page(self, page: Page) -> None:
         page.set_default_timeout(self.config.action_timeout_ms)
@@ -209,13 +229,34 @@ class BrowserSession:
                 await self._context.storage_state(path=str(ss))
             except Exception:  # noqa: BLE001 — a lost session never fails teardown
                 pass
+        videos = []
         if self._context is not None:
-            await self._context.close()
+            videos = [p.video for p in self._context.pages if p.video is not None]
+            await self._context.close()  # videos are finalized on context close
+        await self._name_videos(videos)
         if self._browser is not None:
             await self._browser.close()
         if self._pw is not None:
             await self._pw.stop()
         self._pw = self._browser = self._context = self.page = None
+
+    async def _name_videos(self, videos) -> None:
+        """Give recorded videos stable names: video.webm, then video-2.webm, …
+
+        The first page's recording (the main tab) becomes ``video.webm`` so
+        reports can link it without guessing Playwright's random file names.
+        """
+        video_dir = getattr(self.config, "record_video_dir", None)
+        if video_dir is None or not videos:
+            return
+        for n, video in enumerate(videos, start=1):
+            try:
+                src = Path(await video.path())
+                dst = Path(video_dir) / ("video.webm" if n == 1 else f"video-{n}.webm")
+                if src.exists() and src != dst:
+                    src.replace(dst)
+            except Exception:  # noqa: BLE001 — a lost video never fails teardown
+                pass
 
     async def __aenter__(self) -> "BrowserSession":
         return await self.start()
