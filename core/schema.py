@@ -78,12 +78,20 @@ class TestFile:
 
 
 def overall(logs: list[StepLog]) -> Verdict:
-    """The worst verdict across logs: FAIL > ERROR > UNVERIFIED > PASS."""
+    """The worst verdict across logs: FAIL > ERROR > BLOCKED > UNVERIFIED > SKIPPED > PASS.
+
+    BLOCKED and SKIPPED are real outcomes — a suite where nothing ran must not
+    headline PASS.
+    """
     verdicts = {l.verdict for l in logs}
     if Verdict.FAIL in verdicts:
         return Verdict.FAIL
     if Verdict.ERROR in verdicts:
         return Verdict.ERROR
+    if Verdict.BLOCKED in verdicts:
+        return Verdict.BLOCKED
     if Verdict.UNVERIFIED in verdicts:
         return Verdict.UNVERIFIED
+    if Verdict.SKIPPED in verdicts:
+        return Verdict.SKIPPED
     return Verdict.PASS
