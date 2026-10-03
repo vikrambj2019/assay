@@ -218,11 +218,21 @@ def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
 
     mutation_policy = MutationPolicy(allow_mutations=cfg.allow_mutations)
 
+    if args.adjudicate_fails:
+        cfg.adjudicate_fails = True
+    from harness.adjudicators import make_adjudicator
+    adjudicator = make_adjudicator(cfg)
+    if adjudicator is not None:
+        print(f"  adjudication: on ({adjudicator.reviewer})")
+
     from harness.scenario import BrowserScenarioAdapterFactory
-    adapter_factory = BrowserScenarioAdapterFactory(cfg, out_dir, budget)
+    adapter_factory = BrowserScenarioAdapterFactory(
+        cfg, out_dir, budget, adjudicator=adjudicator
+    )
 
     run_result = asyncio.run(
-        run_plan(exec_plan, mutation_policy, adapter_factory, budget=budget)
+        run_plan(exec_plan, mutation_policy, adapter_factory, budget=budget,
+                 fail_fast=args.fail_fast, flake_retries=args.flake_retries)
     )
     if unselected:
         relabel_unselected(run_result, unselected)
@@ -358,6 +368,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--plan-only", action="store_true", default=False,
         help="generate and save plan.json without executing scenarios "
              "(note: planning may incur model cost)")
+    p_check.add_argument(
+        "--fail-fast", action="store_true", default=False,
+        help="stop executing scenarios after the first confirmed FAIL; "
+             "remaining scenarios are reported SKIPPED (dependents of the "
+             "failed scenario become BLOCKED)")
+    p_check.add_argument(
+        "--flake-retries", type=int, default=0, metavar="N",
+        help="re-run a FAILED scenario up to N times; a retry that passes is "
+             "reported PASS annotated FLAKY (default: 0, no retries)")
+    p_check.add_argument(
+        "--adjudicate-fails", action="store_true", default=False,
+        help="independently re-review each reported FAIL with a fresh-eyes "
+             "model call before recording it as a confirmed application "
+             "failure (also ASSAY_ADJUDICATE_FAILS=true; incurs model cost)")
     p_check.set_defaults(func=_cmd_check)
 
     return parser
