@@ -10,6 +10,38 @@ inputs:
   app-url:
     description: "Base URL of the running application under test."
     required: true
+  test-username:
+    description: "Optional test login username (forwarded to ASSAY_TEST_USERNAME)."
+    required: false
+    default: ""
+  test-password:
+    description: "Optional test login password (forwarded to ASSAY_TEST_PASSWORD)."
+    required: false
+    default: ""
+  auth-state:
+    description: "Optional Playwright storage-state file path."
+    required: false
+    default: ""
+  allow-mutations:
+    description: "Allow scenarios that create, edit, or delete data."
+    required: false
+    default: "false"
+  allowed-origins:
+    description: "Comma-separated browser navigation origins."
+    required: false
+    default: ""
+  max-seconds:
+    description: "Optional run time budget override."
+    required: false
+    default: ""
+  max-actions:
+    description: "Optional browser action budget override."
+    required: false
+    default: ""
+  max-cost-usd:
+    description: "Optional model cost budget override."
+    required: false
+    default: ""
   notes:
     description: "Notes/changes file (Markdown) the check plans from."
     required: false
@@ -75,6 +107,14 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        ASSAY_TEST_USERNAME: ${{ inputs.test-username }}
+        ASSAY_TEST_PASSWORD: ${{ inputs.test-password }}
+        ASSAY_AUTH_STATE: ${{ inputs.auth-state }}
+        ASSAY_ALLOW_MUTATIONS: ${{ inputs.allow-mutations }}
+        ASSAY_ALLOWED_ORIGINS: ${{ inputs.allowed-origins }}
+        ASSAY_MAX_SECONDS: ${{ inputs.max-seconds }}
+        ASSAY_MAX_ACTIONS: ${{ inputs.max-actions }}
+        ASSAY_MAX_COST_USD: ${{ inputs.max-cost-usd }}
       run: |
         set +e
         FLAGS=(--notes "${{ inputs.notes }}" --url "${{ inputs.app-url }}")

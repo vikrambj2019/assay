@@ -290,8 +290,35 @@ async def _execute_scenario(
             duration_s=time.monotonic() - started,
         )
 
-    close_error: Exception | None = None
     outcomes = await _check_assertions(scenario, adapter)
+    verdict, reason = _scenario_verdict(outcomes, scenario.assertions)
+
+    if verdict is Verdict.FAIL:
+        # Independent fresh-eyes review before a FAIL is recorded as a
+        # confirmed application failure.  Adapters without adjudication pass
+        # through untouched (getattr keeps the executor adapter-agnostic).
+        adjudicate = getattr(adapter, "adjudicate_fail", None)
+        if adjudicate is not None:
+            try:
+                new_verdict, note = await adjudicate(verdict, reason, outcomes)
+            except BudgetExhausted:
+                close = getattr(adapter, "close", None)
+                if close is not None:
+                    try:
+                        await close()
+                    except Exception:
+                        pass
+                raise
+            except Exception as exc:  # noqa: BLE001 — reviewer fault, not the app's
+                new_verdict, note = (
+                    Verdict.FAIL,
+                    f" [adjudicator errored ({exc}); original FAIL stands]",
+                )
+            if note:
+                reason = f"{reason}{note}"
+            verdict = new_verdict
+
+    close_error: Exception | None = None
     close = getattr(adapter, "close", None)
     if close is not None:
         try:
@@ -307,24 +334,6 @@ async def _execute_scenario(
             run_id=run_id,
             duration_s=time.monotonic() - started,
         )
-    verdict, reason = _scenario_verdict(outcomes, scenario.assertions)
-
-    if verdict is Verdict.FAIL:
-        # Independent fresh-eyes review before a FAIL is recorded as a
-        # confirmed application failure.  Adapters without adjudication pass
-        # through untouched (getattr keeps the executor adapter-agnostic).
-        adjudicate = getattr(adapter, "adjudicate_fail", None)
-        if adjudicate is not None:
-            try:
-                new_verdict, note = await adjudicate(verdict, reason, outcomes)
-            except Exception as exc:  # noqa: BLE001 — reviewer fault, not the app's
-                new_verdict, note = (
-                    Verdict.FAIL,
-                    f" [adjudicator errored ({exc}); original FAIL stands]",
-                )
-            if note:
-                reason = f"{reason}{note}"
-            verdict = new_verdict
 
     return ScenarioResult(
         scenario_id=scenario.id,

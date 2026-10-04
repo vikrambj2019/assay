@@ -114,6 +114,8 @@ class BrowserScenarioAdapter:
         )
         if result is None:
             return verdict, " [adjudication unavailable; original FAIL stands]"
+        if self.budget is not None and result.cost_usd:
+            self.budget.record_cost(result.cost_usd)
         if result.confirmed:
             return Verdict.FAIL, f" [adjudicated by {result.reviewer}: FAIL confirmed]"
         return (

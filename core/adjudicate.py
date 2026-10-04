@@ -42,6 +42,7 @@ class AdjudicationResult:
     confirmed: bool   # True → the FAIL stands; False → downgrade to UNVERIFIED
     reason: str       # the reviewer's rationale (preserved in the report)
     reviewer: str     # identifier, e.g. "anthropic:claude-sonnet-5" or "stub"
+    cost_usd: float = 0.0
 
 
 class Adjudicator(Protocol):

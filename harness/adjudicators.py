@@ -52,6 +52,20 @@ def parse_adjudication_response(text: str) -> tuple[bool, str]:
     return confirmed, reason
 
 
+def _message_cost(msg: object, model: str) -> float:
+    """Estimate direct API cost from usage, when the SDK exposes no total."""
+    total = getattr(msg, "total_cost_usd", None)
+    if total is not None:
+        return float(total)
+    usage = getattr(msg, "usage", None)
+    if usage is None:
+        return 0.0
+    inp = float(getattr(usage, "input_tokens", 0) or 0)
+    out = float(getattr(usage, "output_tokens", 0) or 0)
+    # Sonnet pricing; keep a conservative fallback for compatible model names.
+    return (inp * 3.0 + out * 15.0) / 1_000_000
+
+
 class AnthropicAdjudicator:
     """Review FAIL verdicts via the Anthropic messages API.
 
@@ -92,7 +106,8 @@ class AnthropicAdjudicator:
                 break
         confirmed, reason = parse_adjudication_response(text)
         return AdjudicationResult(
-            confirmed=confirmed, reason=reason, reviewer=self.reviewer
+            confirmed=confirmed, reason=reason, reviewer=self.reviewer,
+            cost_usd=_message_cost(msg, self._model),
         )
 
 

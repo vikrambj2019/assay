@@ -97,6 +97,8 @@ def _run_check(args: argparse.Namespace) -> tuple[int, dict]:
         return _fail("--plan-only cannot be combined with --plan (the plan already exists)")
     if args.only and not args.plan:
         return _fail("--only requires --plan so the rerun uses the same saved expectations")
+    if args.flake_retries < 0:
+        return _fail("--flake-retries must be zero or a positive integer")
 
     # Validate all required inputs before any paid model call.
     try:
