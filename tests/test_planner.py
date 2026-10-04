@@ -80,6 +80,7 @@ def test_prompt_teaches_deterministic_check_types_and_notes_path():
     assert "Keep persistence verification in the same scenario" in system
     assert "Schedule the primary end-to-end booking" in system
     assert "Deterministic checks run after the entire scenario goal completes" in system
+    assert "Keep checks for final confirmation output" in system
     assert "Use 'changes.md' as the source path" in user
     assert "not the example '<notes-filename>' or 'changes.md'" in user
 

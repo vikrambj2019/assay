@@ -35,6 +35,19 @@ if TYPE_CHECKING:
 _JTYPE = {str: "string", int: "integer", float: "number", bool: "boolean"}
 
 
+class AgentStalledError(Exception):
+    """The browser agent is stuck: STALL_THRESHOLD consecutive actions failed.
+
+    Raised by ``run_goal`` (harness/agent.py) after the drive ends when the
+    stall detector fired.  A harness fault → ERROR, never an application FAIL:
+    repeated tool failures mean the agent lost the thread, so no verdict it
+    reported afterwards can be trusted.
+    """
+
+
+STALL_THRESHOLD = 5  # consecutive failed actions before the run is declared stalled
+
+
 def _schema(props: dict, required: list[str]) -> dict:
     """A strict tool schema: only these params are allowed (a misspelled or
     invented one — timeout_ms, amount, instructions — errors clearly instead of
@@ -69,10 +82,40 @@ async def save_screenshot(session: "BrowserSession", path: Path) -> "Path | None
 def browser_tools(session: "BrowserSession", records: "list[ActionRecord]",
                   out_dir: Path, redactor: "Redactor | None" = None,
                   origin_policy: "OriginPolicy | None" = None,
-                  budget: "RunBudget | None" = None) -> list["SdkMcpTool"]:
-    """The browser tools, closing over the session, action-record list, and output dir."""
+                  budget: "RunBudget | None" = None,
+                  stall_state: "dict | None" = None) -> list["SdkMcpTool"]:
+    """The browser tools, closing over the session, action-record list, and output dir.
+
+    ``stall_state`` is an optional mutable dict the stall detector writes into:
+    when STALL_THRESHOLD consecutive actions fail it gains
+    ``{"stalled": True, "detail": <last detail>, "consecutive_failures": N}``.
+    The caller (harness/agent.py ``run_goal``) turns a stall into an
+    AgentStalledError after the drive ends.  A stall episode poisons the run
+    even if the agent later recovers — a verdict produced after the agent was
+    stuck cannot be trusted.
+    """
     actor = Actor(session)
     _counter = [0]  # monotonically increasing action ID, assigned before execution
+    _consec_failures = [0]  # consecutive failed actions (stall detector)
+
+    def _note_outcome(ok: bool, detail: str) -> "str | None":
+        """Update the stall detector; return a stop notice on first threshold hit."""
+        if ok:
+            _consec_failures[0] = 0
+            return None
+        _consec_failures[0] += 1
+        if (_consec_failures[0] >= STALL_THRESHOLD and stall_state is not None
+                and not stall_state.get("stalled")):
+            stall_state["stalled"] = True
+            stall_state["detail"] = detail
+            stall_state["consecutive_failures"] = _consec_failures[0]
+            return (
+                f"[STALLED] {STALL_THRESHOLD} consecutive actions failed "
+                f"(last: {detail}). The run cannot proceed reliably — stop "
+                f"attempting actions and call complete_goal with UNVERIFIED "
+                f"(the harness will record this run as a harness fault)."
+            )
+        return None
 
     async def act(result_coro: "Awaitable[ActionResult]") -> dict:
         """Execute an action + observation as one serialized transaction.
@@ -129,6 +172,9 @@ def browser_tools(session: "BrowserSession", records: "list[ActionRecord]",
         # Include the step label so two calls with identical detail are still distinct.
         header = f"[step-{action_id:02d}] {detail}"
         text = f"{header}\n\n{page_text}" if page_text else header
+        stall_notice = _note_outcome(action_ok, detail)
+        if stall_notice is not None:
+            text = f"{text}\n\n{stall_notice}"
         return {"content": [{"type": "text", "text": text}]}
 
     @tool("open_url", "Go to a URL — load a page directly by its address, to start "
@@ -146,6 +192,9 @@ def browser_tools(session: "BrowserSession", records: "list[ActionRecord]",
                 if redactor is not None:
                     block_msg = redactor.scrub(block_msg)
                 records.append(ActionRecord(action_id=action_id, detail=block_msg, ok=False))
+                stall_notice = _note_outcome(False, block_msg)
+                if stall_notice is not None:
+                    block_msg = f"{block_msg}\n\n{stall_notice}"
                 return {"content": [{"type": "text", "text": block_msg}]}
         return await act(actor.goto(url))
 

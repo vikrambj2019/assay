@@ -54,6 +54,9 @@ class ScenarioResult:
     run_id: str
     assertions_checked: list[str] = field(default_factory=list)
     assertion_evidence: dict[str, str] = field(default_factory=dict)
+    duration_s: float | None = None  # wall-clock seconds for this scenario
+    attempt: int = 1                # 1 = first try; >1 when flake-retry re-ran it
+    flaky: bool = False             # True when an earlier attempt failed but a retry passed
 
 
 # ── Topological ordering ──────────────────────────────────────────────────────

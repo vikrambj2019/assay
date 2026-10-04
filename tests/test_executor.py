@@ -45,12 +45,17 @@ class FakeAssertionCheckerAdapter:
         fields: dict[str, str] | None = None,
         visible_selectors: set[str] | None = None,
         text_after_reload: str | None = None,
+        known_selectors: set[str] | None = None,
     ) -> None:
         self._url = url
         self._text = text
         self._fields = fields or {}
         self._visible = visible_selectors or set()
         self._text_after_reload = text_after_reload
+        # When provided, selectors outside this set match nothing (→ None),
+        # modelling the real adapter's "no element matched" case.  When None,
+        # every queried selector is treated as known (legacy behavior).
+        self._known = known_selectors
         self.reload_count = 0
 
     async def current_url(self) -> str:
@@ -64,7 +69,9 @@ class FakeAssertionCheckerAdapter:
     async def field_value(self, selector: str) -> str | None:
         return self._fields.get(selector)
 
-    async def is_element_visible(self, selector: str) -> bool:
+    async def is_element_visible(self, selector: str) -> bool | None:
+        if self._known is not None and selector not in self._known:
+            return None
         return selector in self._visible
 
     async def reload(self) -> None:
@@ -294,6 +301,43 @@ async def test_element_hidden_pass():
 async def test_element_hidden_fail():
     adapter = FakeAssertionCheckerAdapter(visible_selectors={".error-banner"})
     a = _req_assertion("a-1", check={"type": "element_hidden", "selector": ".error-banner"})
+    outcome = await evaluate_assertion(a, adapter)
+    assert outcome.verdict is Verdict.FAIL
+
+
+# ── evaluate_assertion: selector matches nothing → ERROR, not FAIL ────────────
+
+@pytest.mark.asyncio
+async def test_element_visible_missing_selector_is_error():
+    """A selector matching nothing is a planner/harness problem (ERROR),
+    never a confirmed application failure (FAIL)."""
+    adapter = FakeAssertionCheckerAdapter(
+        visible_selectors=set(), known_selectors={".other"}
+    )
+    a = _req_assertion("a-1", check={"type": "element_visible", "selector": ".nope"})
+    outcome = await evaluate_assertion(a, adapter)
+    assert outcome.verdict is Verdict.ERROR
+    assert "matched nothing" in outcome.reason
+
+
+@pytest.mark.asyncio
+async def test_element_hidden_missing_selector_is_error():
+    adapter = FakeAssertionCheckerAdapter(
+        visible_selectors=set(), known_selectors={".other"}
+    )
+    a = _req_assertion("a-1", check={"type": "element_hidden", "selector": ".nope"})
+    outcome = await evaluate_assertion(a, adapter)
+    assert outcome.verdict is Verdict.ERROR
+    assert "matched nothing" in outcome.reason
+
+
+@pytest.mark.asyncio
+async def test_element_visible_present_but_hidden_is_fail():
+    """Present-but-hidden is application state → FAIL (not ERROR)."""
+    adapter = FakeAssertionCheckerAdapter(
+        visible_selectors=set(), known_selectors={".success-banner"}
+    )
+    a = _req_assertion("a-1", check={"type": "element_visible", "selector": ".success-banner"})
     outcome = await evaluate_assertion(a, adapter)
     assert outcome.verdict is Verdict.FAIL
 
@@ -661,3 +705,138 @@ def test_assertion_from_dict_no_check_key_defaults_to_none():
     }
     a = Assertion.from_dict(d)
     assert a.check is None
+
+
+# ── fail-fast ─────────────────────────────────────────────────────────────────
+
+class _ScriptedAdapter(FakeScenarioAdapter):
+    """assess_assertion follows a per-run_goal-call script of (verdict, reason)."""
+
+    def __init__(self, script: list[tuple[Verdict, str]], **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._script = script
+
+    async def assess_assertion(self, assertion):
+        idx = min(len(self.goal_calls) - 1, len(self._script) - 1)
+        v, reason = self._script[idx]
+        return AssertionOutcome(
+            assertion.id, v, f"agent assessment: {reason}", reason
+        )
+
+
+def _semantic(sid: str, **kw) -> Scenario:
+    return _scenario(sid, assertions=[_req_assertion("a-1", check=None)], **kw)
+
+
+@pytest.mark.asyncio
+async def test_fail_fast_skips_remaining_after_fail():
+    s1 = _semantic("s-001")
+    s2 = _semantic("s-002")
+    s3 = _semantic("s-003", prerequisites=["s-001"])
+    plan = make_plan("medium", [s1, s2, s3])
+    adapters = {
+        "s-001": AssessedScenarioAdapter(Verdict.FAIL, reason="boom"),
+        "s-002": AssessedScenarioAdapter(Verdict.PASS),
+        "s-003": AssessedScenarioAdapter(Verdict.PASS),
+    }
+    result = await run_plan(plan, _mp(), FakeAdapterFactory(adapters), fail_fast=True)
+
+    by_id = {r.scenario_id: r for r in result.scenario_results}
+    assert by_id["s-001"].verdict is Verdict.FAIL
+    assert by_id["s-002"].verdict is Verdict.SKIPPED
+    assert "fail-fast" in by_id["s-002"].reason
+    # Dependent of the failed scenario still goes through the gate → BLOCKED.
+    assert by_id["s-003"].verdict is Verdict.BLOCKED
+    assert result.complete is False
+    # s-002's goal never ran.
+    assert adapters["s-002"].goal_calls == []
+
+
+@pytest.mark.asyncio
+async def test_no_fail_fast_runs_everything():
+    s1 = _semantic("s-001")
+    s2 = _semantic("s-002")
+    plan = make_plan("medium", [s1, s2])
+    adapters = {
+        "s-001": AssessedScenarioAdapter(Verdict.FAIL, reason="boom"),
+        "s-002": AssessedScenarioAdapter(Verdict.PASS),
+    }
+    result = await run_plan(plan, _mp(), FakeAdapterFactory(adapters))
+    by_id = {r.scenario_id: r for r in result.scenario_results}
+    assert by_id["s-001"].verdict is Verdict.FAIL
+    assert by_id["s-002"].verdict is Verdict.PASS
+
+
+@pytest.mark.asyncio
+async def test_fail_fast_ignores_error():
+    """ERROR is a harness problem — it must not stop the run."""
+    s1 = _semantic("s-001")
+    s2 = _semantic("s-002")
+    plan = make_plan("medium", [s1, s2])
+    adapters = {
+        "s-001": FakeScenarioAdapter(goal_raises=RuntimeError("infra blew up")),
+        "s-002": AssessedScenarioAdapter(Verdict.PASS),
+    }
+    result = await run_plan(plan, _mp(), FakeAdapterFactory(adapters), fail_fast=True)
+    by_id = {r.scenario_id: r for r in result.scenario_results}
+    assert by_id["s-001"].verdict is Verdict.ERROR
+    assert by_id["s-002"].verdict is Verdict.PASS
+
+
+# ── flake retry ───────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_flake_retry_pass_on_second_attempt_marks_flaky():
+    s = _semantic("s-001")
+    plan = make_plan("medium", [s])
+    adapter = _ScriptedAdapter([(Verdict.FAIL, "boom"), (Verdict.PASS, "ok")])
+    result = await run_plan(plan, _mp(), FakeAdapterFactory({"s-001": adapter}),
+                            flake_retries=1)
+    r = result.scenario_results[0]
+    assert r.verdict is Verdict.PASS
+    assert r.flaky is True
+    assert r.attempt == 2
+    assert "FLAKY" in r.reason
+    assert "boom" in r.reason  # first attempt's reason preserved
+    assert adapter.goal_calls == ["s-001", "s-001"]
+
+
+@pytest.mark.asyncio
+async def test_no_retry_by_default():
+    s = _semantic("s-001")
+    plan = make_plan("medium", [s])
+    adapter = _ScriptedAdapter([(Verdict.FAIL, "boom"), (Verdict.PASS, "ok")])
+    result = await run_plan(plan, _mp(), FakeAdapterFactory({"s-001": adapter}))
+    r = result.scenario_results[0]
+    assert r.verdict is Verdict.FAIL
+    assert r.flaky is False
+    assert r.attempt == 1
+    assert adapter.goal_calls == ["s-001"]
+
+
+@pytest.mark.asyncio
+async def test_retry_exhaustion_keeps_fail_with_attempt_count():
+    s = _semantic("s-001")
+    plan = make_plan("medium", [s])
+    adapter = _ScriptedAdapter([(Verdict.FAIL, "nope")] * 3)
+    result = await run_plan(plan, _mp(), FakeAdapterFactory({"s-001": adapter}),
+                            flake_retries=2)
+    r = result.scenario_results[0]
+    assert r.verdict is Verdict.FAIL
+    assert r.flaky is False
+    assert r.attempt == 3
+    assert "every attempt" in r.reason
+    assert len(adapter.goal_calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_error_is_not_retried():
+    """ERROR stays loud — retries are for FAIL only."""
+    s = _semantic("s-001")
+    plan = make_plan("medium", [s])
+    adapter = FakeScenarioAdapter(goal_raises=RuntimeError("infra blew up"))
+    result = await run_plan(plan, _mp(), FakeAdapterFactory({"s-001": adapter}),
+                            flake_retries=2)
+    r = result.scenario_results[0]
+    assert r.verdict is Verdict.ERROR
+    assert adapter.goal_calls == ["s-001"]

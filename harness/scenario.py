@@ -10,6 +10,11 @@ from core.budget import RunBudget
 from core.config import Config
 from core.plan import Scenario
 from core.plan import Assertion
+from core.adjudicate import (
+    AdjudicationInput,
+    Adjudicator,
+    adjudicate_fail,
+)
 from core.assertions import AssertionOutcome
 from core.auth import resolve_auth_setup, verify_authenticated, AuthMode
 from core.settle import settle
@@ -21,14 +26,18 @@ class BrowserScenarioAdapter:
     """Expose one live BrowserSession through the executor adapter contract."""
 
     def __init__(self, session: BrowserSession, cfg: Config, out_dir: Path,
-                 budget: RunBudget | None = None):
+                 budget: RunBudget | None = None,
+                 adjudicator: "Adjudicator | None" = None):
         self.session = session
         self.cfg = cfg
         self.out_dir = out_dir
         self.budget = budget
+        self.adjudicator = adjudicator
         self._goal_logs = []
+        self._goal = ""
 
     async def run_goal(self, scenario: Scenario) -> None:
+        self._goal = scenario.goal
         logs = await run_goal(
             self.session, scenario.goal, self.cfg, self.out_dir,
             budget=self.budget,
@@ -37,16 +46,9 @@ class BrowserScenarioAdapter:
         errors = [log.reason for log in logs if log.verdict is Verdict.ERROR]
         if errors:
             raise RuntimeError("; ".join(errors))
-        final = logs[-1] if logs else None
-        if final is not None and final.verdict is Verdict.FAIL:
-            text = final.reason.lower()
-            timeout_markers = ("time limit exceeded", "time limit", "timed out",
-                               "timeout", "time limit exceeded")
-            if any(marker in text for marker in timeout_markers):
-                raise RuntimeError(
-                    "browser agent appears hung: repeated tool timeout while "
-                    f"executing scenario ({final.reason})"
-                )
+        # NOTE: a stalled agent raises AgentStalledError from run_goal above;
+        # the executor maps it to ERROR.  No timeout substring heuristics here —
+        # stall detection is structural (consecutive failed actions), not textual.
 
     async def assess_assertion(self, assertion: Assertion) -> AssertionOutcome:
         """Use the page-grounded agent assessment for semantic assertions."""
@@ -72,6 +74,56 @@ class BrowserScenarioAdapter:
             final.reason,
         )
 
+    async def adjudicate_fail(
+        self,
+        verdict: Verdict,
+        reason: str,
+        outcomes: "list[AssertionOutcome]",
+    ) -> "tuple[Verdict, str]":
+        """Independently review a FAIL verdict before it is recorded.
+
+        Returns (verdict, note).  With no adjudicator configured the verdict
+        passes through untouched.  A confirmed FAIL keeps its verdict with a
+        confirmation note; a rejected FAIL is downgraded to UNVERIFIED with
+        both rationales preserved.  A broken reviewer never disturbs the
+        original verdict.
+        """
+        if self.adjudicator is None:
+            return verdict, ""
+        trail = [
+            record.detail
+            for log in self._goal_logs
+            for record in log.action_records
+        ]
+        final_text = ""
+        if self.session.page is not None:
+            try:
+                final_text = await self.session.page.locator("body").inner_text()
+            except Exception:  # noqa: BLE001 — page may be gone; trail still stands
+                final_text = ""
+        screenshots = sorted(p.name for p in self.out_dir.glob("step-*.png"))
+        result = await adjudicate_fail(
+            AdjudicationInput(
+                goal=self._goal,
+                reported_reason=reason,
+                action_trail=trail,
+                final_page_text=final_text,
+                screenshot_paths=screenshots,
+            ),
+            self.adjudicator,
+        )
+        if result is None:
+            return verdict, " [adjudication unavailable; original FAIL stands]"
+        if self.budget is not None and result.cost_usd:
+            self.budget.record_cost(result.cost_usd)
+        if result.confirmed:
+            return Verdict.FAIL, f" [adjudicated by {result.reviewer}: FAIL confirmed]"
+        return (
+            Verdict.UNVERIFIED,
+            f" [adjudicator {result.reviewer} did not confirm the FAIL: "
+            f"{result.reason}]",
+        )
+
     async def current_url(self) -> str:
         return self.session.page.url if self.session.page is not None else ""
 
@@ -92,10 +144,15 @@ class BrowserScenarioAdapter:
                 raise
             return None
 
-    async def is_element_visible(self, selector: str) -> bool:
+    async def is_element_visible(self, selector: str) -> bool | None:
         if self.session.page is None:
             raise RuntimeError("browser page is not available")
-        return await self.session.page.locator(selector).first.is_visible()
+        locator = self.session.page.locator(selector)
+        if await locator.count() == 0:
+            # Selector matched nothing: a planner/harness problem, reported as
+            # ERROR by the assertion layer (never as an application FAIL).
+            return None
+        return await locator.first.is_visible()
 
     async def reload(self) -> None:
         if self.session.page is None:
@@ -110,10 +167,12 @@ class BrowserScenarioAdapter:
 class BrowserScenarioAdapterFactory:
     """Create isolated browser sessions sequentially for plan scenarios."""
 
-    def __init__(self, cfg: Config, out_dir: Path, budget: RunBudget | None = None):
+    def __init__(self, cfg: Config, out_dir: Path, budget: RunBudget | None = None,
+                 adjudicator: "Adjudicator | None" = None):
         self.cfg = cfg
         self.out_dir = out_dir
         self.budget = budget
+        self.adjudicator = adjudicator
 
     async def create(self, scenario: Scenario) -> BrowserScenarioAdapter:
         scenario_cfg = replace(self.cfg)
@@ -125,7 +184,8 @@ class BrowserScenarioAdapterFactory:
             scenario_cfg.record_video_dir = scenario_dir
         session = await BrowserSession(scenario_cfg).start()
         await _prepare_authenticated_session(session, scenario_cfg)
-        return BrowserScenarioAdapter(session, scenario_cfg, scenario_dir, self.budget)
+        return BrowserScenarioAdapter(session, scenario_cfg, scenario_dir, self.budget,
+                                      adjudicator=self.adjudicator)
 
 
 async def _prepare_authenticated_session(session: BrowserSession, cfg: Config) -> None:
