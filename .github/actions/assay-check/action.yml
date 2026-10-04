@@ -69,6 +69,10 @@ inputs:
       before recording it as a confirmed application failure (extra model cost).
     required: false
     default: "false"
+  record-video:
+    description: "Record per-scenario Chromium videos; disabled by default for speed."
+    required: false
+    default: "false"
   results-dir:
     description: "Directory the check writes its artifacts to."
     required: false
@@ -120,6 +124,7 @@ runs:
         FLAGS=(--notes "${{ inputs.notes }}" --url "${{ inputs.app-url }}")
         FLAGS+=(--depth "${{ inputs.depth }}" --output "${{ inputs.results-dir }}")
         FLAGS+=(--flake-retries "${{ inputs.flake-retries }}")
+        if [ "${{ inputs.record-video }}" = "true" ]; then FLAGS+=(--record-video); fi
         if [ "${{ inputs.fail-fast }}" = "true" ]; then FLAGS+=(--fail-fast); fi
         if [ "${{ inputs.adjudicate-fails }}" = "true" ]; then FLAGS+=(--adjudicate-fails); fi
         assay check "${FLAGS[@]}"
