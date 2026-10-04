@@ -205,6 +205,37 @@ uncertainty visible.
 The CLI is the stable interface; every harness (Claude Code, Codex, Cursor, CI
 scripts) calls it the same way.
 
+#### Give your coding agent a browser check
+
+You do not need a vendor-specific plugin. Add the browser-check instructions
+to the repository, make sure the app is running, and ask your agent:
+
+```text
+Run Assay against the user-visible changes in this branch. Use changes.md
+for the behavioral notes, run the check at low depth, and report the result
+from results/check/summary.md. If it fails, fix the application and rerun the
+same frozen plan before opening the PR.
+```
+
+Use the integration that your agent already understands:
+
+| Coding agent | Add these instructions |
+| --- | --- |
+| Claude Code | Copy [`integrations/AGENTS.md`](integrations/AGENTS.md) into `CLAUDE.md`, or install [`skills/browser-check/SKILL.md`](skills/browser-check/SKILL.md) as a project skill. |
+| Codex | Copy [`integrations/AGENTS.md`](integrations/AGENTS.md) into `AGENTS.md`. |
+| Cursor | Copy it into `.cursorrules` (or the project rules file). |
+| Other agents or CI | Call the CLI below and parse its `--format json` output. |
+
+The one-time setup is:
+
+1. Start the app at a trusted local or test URL.
+2. Put `ASSAY_BASE_URL` and `ANTHROPIC_API_KEY` in `.env` (and test
+   credentials if the app requires login).
+3. Write `changes.md` as short, user-observable outcomes.
+4. Run the command below. The agent should read `summary.md`, fix confirmed
+   application failures, and rerun `plan.json` rather than generating a new
+   plan.
+
 ```bash
 assay check --notes changes.md --diff main --depth low --format json --output results/check
 ```
