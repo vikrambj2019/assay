@@ -163,12 +163,12 @@ def _build_system_prompt(policy: DepthPolicy, depth: str) -> str:
             in the plan, after only the prerequisites it truly needs. Do not
             spend the entire action budget on small exploratory scenarios first.
         12. Deterministic checks run after the entire scenario goal completes,
-            on the final page state. Use text_visible and text_absent only for
-            text that must be present or absent on that final page. Do not use
-            them for intermediate values such as promo codes, form errors, or
-            review-page labels when the goal navigates onward; leave those
-            assertions without a check so the agent's page-grounded assessment
-            can evaluate them.
+            on the final page state. Keep checks for final confirmation output,
+            booking/reference formats, final URLs, and persistence after reload.
+            Do not use text_visible or text_absent for transient intermediate
+            values such as promo codes, form errors, or review-page labels when
+            the goal navigates onward; leave only those assertions without a
+            check so the agent's page-grounded assessment can evaluate them.
 
         Output ONLY a single valid JSON object. Do not include markdown fences,
         prose, or any text outside the JSON object.

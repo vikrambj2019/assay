@@ -586,6 +586,19 @@ docker compose run --rm --entrypoint pytest agent -q
 See `CONTRIBUTING.md` for setup instructions, the five-minute demo, and how to
 add bugs to the regression fixture.
 
+## Harness trust options
+
+PR checks can enable independent failure review and flake handling:
+
+```bash
+assay check --notes changes.md --adjudicate-fails --flake-retries 1
+```
+
+The check can also stop after the first confirmed failure with `--fail-fast`.
+Screenshots, videos, JUnit durations, and the machine-readable summary are
+written to the output directory. See [`docs/CI.md`](docs/CI.md) for the
+composite GitHub Action.
+
 ## License
 
 This project is licensed under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0).

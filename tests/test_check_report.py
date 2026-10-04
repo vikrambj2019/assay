@@ -655,3 +655,50 @@ def _find_testcase(root: ET.Element, name: str) -> ET.Element | None:
         if elem.get("name") == name:
             return elem
     return None
+
+
+# ── screenshot strip in report.html ───────────────────────────────────────────
+
+def test_html_screenshot_strip_present():
+    out = _tmpdir()
+    (out / "s1").mkdir(parents=True)
+    (out / "s1" / "step-01.png").write_bytes(b"fake-png")
+    (out / "s1" / "step-02.png").write_bytes(b"fake-png")
+    rr = _run_result(_result("s1", Verdict.FAIL))
+    plan = _plan(_scenario("s1"))
+    content = write_check_html(rr, plan, out).read_text()
+    assert "Screenshots (2)" in content
+    assert "s1/step-01.png" in content
+    assert "s1/step-02.png" in content
+
+
+def test_html_no_screenshot_strip_when_none():
+    out = _tmpdir()
+    rr = _run_result(_result("s1", Verdict.PASS))
+    plan = _plan(_scenario("s1"))
+    content = write_check_html(rr, plan, out).read_text()
+    assert "Screenshots" not in content
+
+
+# ── junit.xml durations ───────────────────────────────────────────────────────
+
+def test_junit_reports_real_duration():
+    out = _tmpdir()
+    r = _result("s1", Verdict.PASS)
+    r.duration_s = 1.23456
+    rr = _run_result(r)
+    plan = _plan(_scenario("s1"))
+    path = write_junit_xml(rr, plan, out)
+    tc = _find_testcase(ET.parse(str(path)).getroot(), "Scenario s1")
+    assert tc is not None
+    assert tc.get("time") == "1.235"
+
+
+def test_junit_duration_defaults_to_zero_when_unknown():
+    out = _tmpdir()
+    rr = _run_result(_result("s1", Verdict.PASS))  # duration_s=None
+    plan = _plan(_scenario("s1"))
+    path = write_junit_xml(rr, plan, out)
+    tc = _find_testcase(ET.parse(str(path)).getroot(), "Scenario s1")
+    assert tc is not None
+    assert tc.get("time") == "0"

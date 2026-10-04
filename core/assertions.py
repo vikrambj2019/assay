@@ -52,8 +52,14 @@ class AssertionCheckerAdapter(Protocol):
         """Return the value of the first matching input, or None if not found."""
         ...
 
-    async def is_element_visible(self, selector: str) -> bool:
-        """True when the first element matching *selector* is visible."""
+    async def is_element_visible(self, selector: str) -> "bool | None":
+        """Visibility of the first element matching *selector*.
+
+        Returns True when visible, False when present but hidden, and None
+        when the selector matches no element at all.  The None case lets
+        callers distinguish a bad selector (planner/harness problem → ERROR)
+        from a present-but-hidden element (application state → FAIL/PASS).
+        """
         ...
 
     async def reload(self) -> None:
@@ -219,11 +225,18 @@ async def _element_visible(
 ) -> AssertionOutcome:
     selector = str(check["selector"])
     visible = await adapter.is_element_visible(selector)
+    if visible is None:
+        return AssertionOutcome(
+            aid, Verdict.ERROR,
+            f"element {selector!r} matched nothing — selector does not identify "
+            f"an element (planner/harness problem, not an application failure)",
+            "",
+        )
     if visible:
         return AssertionOutcome(aid, Verdict.PASS, f"element {selector!r} is visible", "")
     return AssertionOutcome(
         aid, Verdict.FAIL,
-        f"element {selector!r} is not visible",
+        f"element {selector!r} is present but not visible",
         "",
     )
 
@@ -233,6 +246,13 @@ async def _element_hidden(
 ) -> AssertionOutcome:
     selector = str(check["selector"])
     visible = await adapter.is_element_visible(selector)
+    if visible is None:
+        return AssertionOutcome(
+            aid, Verdict.ERROR,
+            f"element {selector!r} matched nothing — selector does not identify "
+            f"an element (planner/harness problem, not an application failure)",
+            "",
+        )
     if not visible:
         return AssertionOutcome(aid, Verdict.PASS, f"element {selector!r} is hidden", "")
     return AssertionOutcome(

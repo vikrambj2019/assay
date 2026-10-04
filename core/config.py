@@ -204,6 +204,11 @@ class Config:
     allow_mutations: bool = False       # ASSAY_ALLOW_MUTATIONS
     depth: str = "medium"              # ASSAY_DEPTH: low | medium | high
 
+    # Independently re-review each reported FAIL with a fresh-eyes model call
+    # before it is recorded as a confirmed application failure.
+    # ASSAY_ADJUDICATE_FAILS=true (or --adjudicate-fails).
+    adjudicate_fails: bool = False
+
     # Optional budget overrides (None = use depth preset defaults).
     max_seconds: int | None = None      # ASSAY_MAX_SECONDS
     max_actions: int | None = None      # ASSAY_MAX_ACTIONS
@@ -293,6 +298,7 @@ class Config:
             test_data_file=Path(test_data_raw) if test_data_raw else None,
             allowed_origins=allowed_origins,
             allow_mutations=_strict_env_bool("ASSAY_ALLOW_MUTATIONS", False),
+            adjudicate_fails=_strict_env_bool("ASSAY_ADJUDICATE_FAILS", False),
             depth=depth,
             max_seconds=max_seconds,
             max_actions=max_actions,
