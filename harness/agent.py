@@ -38,7 +38,7 @@ from core.budget import BudgetExhausted, RunBudget
 from core.policy import OriginPolicy
 from core.schema import ActionRecord, StepLog, Verdict
 from harness.page import page_hooks
-from harness.tools import browser_tools
+from harness.tools import STALL_THRESHOLD, AgentStalledError, browser_tools
 
 if TYPE_CHECKING:
     from claude_agent_sdk import McpSdkServerConfig
@@ -423,12 +423,13 @@ async def run_goal(session: "BrowserSession", goal: str, cfg: "Config", out_dir:
         verification_tools = [verification_tool(
             session, assertions, checker, checkpoint_outcomes, records, out_dir, budget,
         )]
-
+    stall_state: dict = {}  # written by the stall detector in harness/tools.py
     server = create_sdk_mcp_server(
         "assay", tools=[*verification_tools, *browser_tools(
             session, records, out_dir, redactor,
             origin_policy=OriginPolicy(cfg.allowed_origins),
             budget=budget,
+            stall_state=stall_state,
         ),
                       report_stage, complete_goal_tool])
     session.evidence.drain()  # start with clean buffers
@@ -444,6 +445,14 @@ async def run_goal(session: "BrowserSession", goal: str, cfg: "Config", out_dir:
 
     if isinstance(exc, BudgetExhausted):
         raise exc
+
+    if stall_state.get("stalled"):
+        # The agent was stuck (repeated tool failures): nothing it reported
+        # afterwards can be trusted.  Harness fault → ERROR, never a FAIL.
+        raise AgentStalledError(
+            f"agent stalled after {stall_state.get('consecutive_failures', STALL_THRESHOLD)} "
+            f"consecutive failed actions (last: {stall_state.get('detail', '?')})"
+        )
 
     if result is not None:
         if budget is not None:

@@ -168,7 +168,9 @@ def _build_system_prompt(policy: DepthPolicy, depth: str) -> str:
             keep the deterministic check. Include when to verify that assertion
             ID in the goal: the executor calls verify_assertion before leaving
             that page. A missing checkpoint is UNVERIFIED, never inferred from
-            overall goal success. Assertions without a check are UNVERIFIED.
+            overall goal success. Keep checks for final confirmation output,
+            booking/reference formats, final URLs, and persistence after reload.
+            Assertions without a check are UNVERIFIED.
         13. Source excerpts must be exact substrings of the cited context.
             Never invent or paraphrase an excerpt.
 

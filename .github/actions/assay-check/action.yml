@@ -1,0 +1,173 @@
+name: "Assay browser check"
+description: >-
+  Run an assay pre-PR browser check against a running web app. Plans from the
+  change notes, executes scenarios in Chromium, and reports evidence-backed
+  PASS / FAIL / BLOCKED / ERROR / UNVERIFIED verdicts. Uploads the full
+  artifact directory (report.html, junit.xml, screenshots, video) and posts
+  the summary as a PR comment.
+
+inputs:
+  app-url:
+    description: "Base URL of the running application under test."
+    required: true
+  test-username:
+    description: "Optional test login username (forwarded to ASSAY_TEST_USERNAME)."
+    required: false
+    default: ""
+  test-password:
+    description: "Optional test login password (forwarded to ASSAY_TEST_PASSWORD)."
+    required: false
+    default: ""
+  auth-state:
+    description: "Optional Playwright storage-state file path."
+    required: false
+    default: ""
+  allow-mutations:
+    description: "Allow scenarios that create, edit, or delete data."
+    required: false
+    default: "false"
+  allowed-origins:
+    description: "Comma-separated browser navigation origins."
+    required: false
+    default: ""
+  max-seconds:
+    description: "Optional run time budget override."
+    required: false
+    default: ""
+  max-actions:
+    description: "Optional browser action budget override."
+    required: false
+    default: ""
+  max-cost-usd:
+    description: "Optional model cost budget override."
+    required: false
+    default: ""
+  notes:
+    description: "Notes/changes file (Markdown) the check plans from."
+    required: false
+    default: "changes.md"
+  anthropic-api-key:
+    description: "Anthropic API key for the planning/agent/adjudication model calls."
+    required: true
+  depth:
+    description: "Test depth preset: low | medium | high."
+    required: false
+    default: "medium"
+  fail-fast:
+    description: "Stop executing scenarios after the first confirmed FAIL."
+    required: false
+    default: "false"
+  flake-retries:
+    description: >-
+      Re-run a FAILED scenario up to N times; a retry that passes is reported
+      PASS annotated FLAKY instead of failing the run.
+    required: false
+    default: "1"
+  adjudicate-fails:
+    description: >-
+      Independently re-review each reported FAIL with a fresh-eyes model call
+      before recording it as a confirmed application failure (extra model cost).
+    required: false
+    default: "false"
+  record-video:
+    description: "Record per-scenario Chromium videos; disabled by default for speed."
+    required: false
+    default: "false"
+  results-dir:
+    description: "Directory the check writes its artifacts to."
+    required: false
+    default: "assay-results"
+  comment-on-pr:
+    description: "Post summary.md as a comment on the pull request."
+    required: false
+    default: "true"
+
+outputs:
+  exit-code:
+    description: >-
+      The assay check exit code: 0 pass, 1 confirmed failure,
+      2 incomplete/blocked/error/invalid input.
+    value: ${{ steps.run-check.outputs.exit-code }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install assay
+      shell: bash
+      run: pip install "${{ github.action_path }}/../.."
+
+    - name: Install Playwright Chromium
+      shell: bash
+      run: |
+        playwright install chromium --with-deps
+
+    - name: Run assay check
+      id: run-check
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        ASSAY_TEST_USERNAME: ${{ inputs.test-username }}
+        ASSAY_TEST_PASSWORD: ${{ inputs.test-password }}
+        ASSAY_AUTH_STATE: ${{ inputs.auth-state }}
+        ASSAY_ALLOW_MUTATIONS: ${{ inputs.allow-mutations }}
+        ASSAY_ALLOWED_ORIGINS: ${{ inputs.allowed-origins }}
+        ASSAY_MAX_SECONDS: ${{ inputs.max-seconds }}
+        ASSAY_MAX_ACTIONS: ${{ inputs.max-actions }}
+        ASSAY_MAX_COST_USD: ${{ inputs.max-cost-usd }}
+      run: |
+        set +e
+        FLAGS=(--notes "${{ inputs.notes }}" --url "${{ inputs.app-url }}")
+        FLAGS+=(--depth "${{ inputs.depth }}" --output "${{ inputs.results-dir }}")
+        FLAGS+=(--flake-retries "${{ inputs.flake-retries }}")
+        if [ "${{ inputs.record-video }}" = "true" ]; then FLAGS+=(--record-video); fi
+        if [ "${{ inputs.fail-fast }}" = "true" ]; then FLAGS+=(--fail-fast); fi
+        if [ "${{ inputs.adjudicate-fails }}" = "true" ]; then FLAGS+=(--adjudicate-fails); fi
+        assay check "${FLAGS[@]}"
+        CODE=$?
+        echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
+        echo "assay exit code: $CODE"
+
+    - name: Upload assay artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: assay-check
+        path: ${{ inputs.results-dir }}
+        if-no-files-found: warn
+
+    - name: Comment PR with verdict summary
+      if: always() && github.event_name == 'pull_request' && inputs.comment-on-pr == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const path = '${{ inputs.results-dir }}/summary.md';
+          let body;
+          try {
+            body = fs.readFileSync(path, 'utf8');
+          } catch (e) {
+            body = '### Browser check (assay)\n\nNo summary.md was produced — the check did not complete.';
+          }
+          if (body.length > 60000) body = body.slice(0, 60000) + '\n\n…(truncated)';
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body,
+          });
+
+    - name: Gate on check result
+      shell: bash
+      run: |
+        CODE="${{ steps.run-check.outputs.exit-code }}"
+        case "$CODE" in
+          0) echo "assay check passed — safe to merge." ;;
+          1) echo "::error::assay check found a confirmed application failure — do not merge." ;;
+          2) echo "::error::assay check incomplete/blocked/error — needs a human look before merge." ;;
+        esac
+        exit "$CODE"

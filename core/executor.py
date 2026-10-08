@@ -20,6 +20,7 @@ a pre-configured page state without a real browser.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -56,7 +57,7 @@ class ScenarioAdapter(Protocol):
     async def current_url(self) -> str: ...
     async def page_text(self) -> str: ...
     async def field_value(self, selector: str) -> "str | None": ...
-    async def is_element_visible(self, selector: str) -> bool: ...
+    async def is_element_visible(self, selector: str) -> "bool | None": ...
     async def reload(self) -> None: ...
 
     async def assess_assertion(self, assertion: Assertion) -> AssertionOutcome: ...
@@ -89,6 +90,8 @@ async def run_plan(
     adapter_factory: ScenarioAdapterFactory,
     run_id: str | None = None,
     budget: RunBudget | None = None,
+    fail_fast: bool = False,
+    flake_retries: int = 0,
 ) -> RunResult:
     """Execute *plan* sequentially in dependency order.
 
@@ -104,12 +107,24 @@ async def run_plan(
     recorded as UNVERIFIED with the budget reason; the run is then marked
     incomplete (``complete=False``).
 
+    When *fail_fast* is true, the first confirmed FAIL stops execution:
+    remaining scenarios are reported SKIPPED (dependents of the failed scenario
+    still go through the normal gate and become BLOCKED).  Fail-fast triggers
+    only on FAIL — ERROR is a harness problem and does not stop the run.
+
+    When *flake_retries* > 0, a FAILED scenario is re-run up to that many
+    times before the verdict is accepted.  A retry that passes is reported as
+    PASS annotated FLAKY (both attempts' reasons preserved); only FAIL is
+    retried — ERROR stays loud.
+
     Args:
         plan:            Validated plan (not mutated).
         mutation_policy: Whether mutation scenarios are permitted.
         adapter_factory: Provides a ScenarioAdapter per scenario.
         run_id:          Optional pre-generated ID; one is minted when absent.
         budget:          Optional RunBudget; when absent no budget is enforced.
+        fail_fast:       Stop executing after the first confirmed FAIL.
+        flake_retries:   Re-run FAILED scenarios this many times (0 = off).
 
     Returns:
         RunResult with all per-scenario results and a completeness flag.
@@ -123,8 +138,32 @@ async def run_plan(
     completed: dict[str, Verdict] = {}
     results: list[ScenarioResult] = []
     budget_reason: str | None = None
+    fail_fast_triggered_by: str | None = None
 
     for scenario in order:
+        # Fail-fast: don't execute further scenarios, but still honor gates so
+        # dependents of the failed scenario are BLOCKED (not silently skipped).
+        if fail_fast_triggered_by is not None:
+            gate = pre_check_scenario(scenario, mutation_policy, completed)
+            if gate is not None:
+                verdict, reason = gate
+            else:
+                verdict, reason = (
+                    Verdict.SKIPPED,
+                    f"fail-fast: not executed after scenario "
+                    f"'{fail_fast_triggered_by}' failed",
+                )
+            result = ScenarioResult(
+                scenario_id=scenario.id,
+                scenario_title=scenario.title,
+                verdict=verdict,
+                reason=reason,
+                run_id=run_id,
+            )
+            completed[scenario.id] = verdict
+            results.append(result)
+            continue
+
         # If budget was already exhausted, mark remaining scenarios UNVERIFIED.
         if budget_reason is not None:
             result = ScenarioResult(
@@ -168,6 +207,10 @@ async def run_plan(
         else:
             try:
                 result = await _execute_scenario(scenario, run_id, adapter_factory)
+                if flake_retries > 0 and result.verdict is Verdict.FAIL:
+                    result = await _retry_failed_scenario(
+                        scenario, run_id, adapter_factory, result, flake_retries
+                    )
             except BudgetExhausted as exc:
                 budget_reason = str(exc)
                 result = ScenarioResult(
@@ -177,15 +220,20 @@ async def run_plan(
                     reason=budget_reason,
                     run_id=run_id,
                 )
+            else:
+                if fail_fast and result.verdict is Verdict.FAIL:
+                    fail_fast_triggered_by = scenario.id
 
         completed[scenario.id] = result.verdict
         results.append(result)
 
     # A run is complete when every non-skipped scenario has a definitive result
-    # (i.e., no UNVERIFIED required assertions remain).
+    # (i.e., no UNVERIFIED required assertions remain) and neither the budget
+    # nor fail-fast cut the run short.
     non_skipped = [r for r in results if r.verdict is not Verdict.SKIPPED]
     complete = (
         budget_reason is None
+        and fail_fast_triggered_by is None
         and all(r.verdict is not Verdict.UNVERIFIED for r in non_skipped)
     )
 
@@ -199,16 +247,15 @@ async def _execute_scenario(
     run_id: str,
     factory: ScenarioAdapterFactory,
 ) -> ScenarioResult:
-    """Run one scenario: goal → assertions → verdict."""
+    """Run one scenario: goal, assertions, adjudication, then cleanup."""
+    started = time.monotonic()
     try:
         adapter = await factory.create(scenario)
     except Exception as exc:  # noqa: BLE001
         return ScenarioResult(
-            scenario_id=scenario.id,
-            scenario_title=scenario.title,
-            verdict=Verdict.ERROR,
-            reason=f"failed to create scenario adapter: {exc}",
-            run_id=run_id,
+            scenario_id=scenario.id, scenario_title=scenario.title,
+            verdict=Verdict.ERROR, reason=f"failed to create scenario adapter: {exc}",
+            run_id=run_id, duration_s=time.monotonic() - started,
         )
 
     try:
@@ -220,7 +267,7 @@ async def _execute_scenario(
                 await close()
             except Exception:
                 pass
-        raise  # propagate to run_plan for uniform handling
+        raise
     except Exception as exc:  # noqa: BLE001
         close = getattr(adapter, "close", None)
         if close is not None:
@@ -229,15 +276,12 @@ async def _execute_scenario(
             except Exception:
                 pass
         return ScenarioResult(
-            scenario_id=scenario.id,
-            scenario_title=scenario.title,
-            verdict=Verdict.ERROR,
-            reason=f"scenario goal execution failed: {exc}",
-            run_id=run_id,
-            stages=getattr(adapter, "execution_logs", lambda: [])(),
+            scenario_id=scenario.id, scenario_title=scenario.title,
+            verdict=Verdict.ERROR, reason=f"scenario goal execution failed: {exc}",
+            run_id=run_id, stages=getattr(adapter, "execution_logs", lambda: [])(),
+            duration_s=time.monotonic() - started,
         )
 
-    close_error: Exception | None = None
     try:
         outcomes = await _check_assertions(scenario, adapter)
     except BudgetExhausted:
@@ -248,42 +292,88 @@ async def _execute_scenario(
             except Exception:
                 pass
         raise
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         outcomes = [AssertionOutcome(a.id, Verdict.ERROR,
                     f"assertion evaluation interrupted: {exc}") for a in scenario.assertions]
-    close = getattr(adapter, "close", None)
-    if close is not None:
-        try:
-            await close()
-        except Exception as exc:  # noqa: BLE001
-            close_error = exc
+
     verdict, reason = _scenario_verdict(outcomes, scenario.assertions)
+    if verdict is Verdict.FAIL:
+        adjudicate = getattr(adapter, "adjudicate_fail", None)
+        if adjudicate is not None:
+            try:
+                new_verdict, note = await adjudicate(verdict, reason, outcomes)
+            except BudgetExhausted:
+                close = getattr(adapter, "close", None)
+                if close is not None:
+                    try:
+                        await close()
+                    except Exception:
+                        pass
+                raise
+            except Exception as exc:  # noqa: BLE001
+                new_verdict, note = Verdict.FAIL, f" [adjudicator errored ({exc}); original FAIL stands]"
+            if note:
+                reason = f"{reason}{note}"
+            verdict = new_verdict
+
     status = getattr(adapter, "execution_status", None)
     if verdict is Verdict.PASS and status is not None:
         goal_verdict, goal_reason = status()
         if goal_verdict is not Verdict.PASS:
             verdict = Verdict.UNVERIFIED
             reason = f"assertions passed but goal execution was {goal_verdict.value}: {goal_reason}"
+
+    close_error: Exception | None = None
+    close = getattr(adapter, "close", None)
+    if close is not None:
+        try:
+            await close()
+        except Exception as exc:  # noqa: BLE001
+            close_error = exc
     if close_error is not None:
-        if verdict is not Verdict.FAIL:
-            verdict = Verdict.ERROR
-        reason += f"; scenario cleanup failed: {close_error}"
+        return ScenarioResult(
+            scenario_id=scenario.id, scenario_title=scenario.title,
+            verdict=Verdict.ERROR, reason=f"scenario cleanup failed: {close_error}",
+            run_id=run_id, duration_s=time.monotonic() - started,
+        )
 
     return ScenarioResult(
-        scenario_id=scenario.id,
-        scenario_title=scenario.title,
-        verdict=verdict,
-        reason=reason,
-        run_id=run_id,
+        scenario_id=scenario.id, scenario_title=scenario.title,
+        verdict=verdict, reason=reason, run_id=run_id,
         assertion_outcomes=outcomes,
         stages=getattr(adapter, "execution_logs", lambda: [])(),
         assertions_checked=[o.assertion_id for o in outcomes],
-        assertion_evidence={
-            o.assertion_id: (o.evidence or o.reason)
-            for o in outcomes
-            if o.evidence or o.reason
-        },
+        assertion_evidence={o.assertion_id: (o.evidence or o.reason)
+                            for o in outcomes if o.evidence or o.reason},
+        duration_s=time.monotonic() - started,
     )
+
+
+async def _retry_failed_scenario(
+    scenario: Scenario,
+    run_id: str,
+    factory: ScenarioAdapterFactory,
+    first_result: ScenarioResult,
+    max_retries: int,
+) -> ScenarioResult:
+    """Retry confirmed failures with fresh adapters and preserve flake evidence."""
+    result = first_result
+    for attempt in range(2, max_retries + 2):
+        retry = await _execute_scenario(scenario, run_id, factory)
+        retry.attempt = attempt
+        if retry.verdict is Verdict.PASS:
+            retry.flaky = True
+            retry.reason = (
+                f"FLAKY: attempt 1 failed ({first_result.reason}); "
+                f"attempt {attempt} passed"
+            )
+            return retry
+        retry.reason = (
+            f"{retry.reason} (attempt {attempt} of {max_retries + 1}; "
+            "failed on every attempt)"
+        )
+        result = retry
+    return result
 
 
 async def _check_assertions(

@@ -195,6 +195,11 @@ main{padding:20px 28px;max-width:960px}
 .budget{background:#fff8ed;border:1px solid #d0a000;border-radius:8px;
         padding:10px 16px;margin:0 0 18px;font-size:13px}
 .rec{width:100%;max-width:880px;border:1px solid #d0d7de;border-radius:6px;margin:8px 0 0}
+.shots{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0}
+.shots a{display:block;border:1px solid #d0d7de;border-radius:6px;overflow:hidden;
+         line-height:0}
+.shots img{width:180px;height:auto;display:block}
+details.shots-wrap summary{cursor:pointer;color:#0969da;font-size:12px}
 .pill{display:inline-block;padding:1px 7px;border-radius:8px;font-size:11px;
       font-weight:600;border:1px solid currentColor;margin-right:4px}
 """
@@ -248,7 +253,8 @@ def write_check_html(
     plan_lookup = {s.id: s for s in plan.scenarios}
     cards_html = "\n".join(
         _scenario_card(r, plan_lookup.get(r.scenario_id), assertion_kinds,
-                       scenario_video(out_dir, r.scenario_id), out_dir)
+                       scenario_video(out_dir, r.scenario_id),
+                       scenario_screenshots(out_dir, r.scenario_id), out_dir)
         for r in run_result.scenario_results
     )
 
@@ -291,6 +297,7 @@ def _scenario_card(
     scenario,  # Scenario | None from the plan
     assertion_kinds: dict[str, str],
     video: "str | None" = None,
+    screenshots: "list[str] | None" = None,
     out_dir: Path | None = None,
 ) -> str:
     color = _COLOR[r.verdict]
@@ -345,6 +352,18 @@ def _scenario_card(
             f"<video class='rec' controls preload='metadata' src='{src}'></video>"
             f"<p class='meta'><a href='{src}'>Download recording</a></p>"
         )
+    shots_html = ""
+    if screenshots:
+        thumbs = "".join(
+            f"<a href='{escape(s, quote=True)}' target='_blank'>"
+            f"<img src='{escape(s, quote=True)}' loading='lazy' alt='step screenshot'></a>"
+            for s in screenshots
+        )
+        shots_html = (
+            f"<details class='shots-wrap'><summary>Screenshots "
+            f"({len(screenshots)})</summary>"
+            f"<div class='shots'>{thumbs}</div></details>"
+        )
 
     return (
         f"<div class='card'>"
@@ -352,7 +371,7 @@ def _scenario_card(
         f"<span class='title'>{escape(r.scenario_title)}</span>"
         f"<span style='color:#6e7781;font-size:12px'>{escape(r.scenario_id)}</span>"
         f"</div>"
-        f"<div class='card-body'>{goal_html}{reason_html}{assertions_html}{evidence_html}{video_html}</div>"
+        f"<div class='card-body'>{goal_html}{reason_html}{assertions_html}{evidence_html}{shots_html}{video_html}</div>"
         f"</div>"
     )
 
@@ -453,7 +472,7 @@ def write_junit_xml(
         tc = ET.SubElement(suite, "testcase", {
             "classname": classname,
             "name":      safe.scrub(r.scenario_title),
-            "time":      "0",
+            "time":      f"{r.duration_s:.3f}" if r.duration_s is not None else "0",
         })
         if r.verdict is Verdict.FAIL:
             reason = safe.scrub(r.reason)
@@ -480,6 +499,19 @@ def scenario_video(out_dir: Path, scenario_id: str) -> "str | None":
     """Relative path of a scenario's recorded video, or None when not recorded."""
     rel = Path(scenario_id) / "video.webm"
     return rel.as_posix() if (out_dir / rel).is_file() else None
+
+
+def scenario_screenshots(out_dir: Path, scenario_id: str) -> list[str]:
+    """Relative paths of a scenario's per-action screenshots (step-NN.png).
+
+    The harness writes one screenshot per action into ``<out_dir>/<scenario_id>``.
+    Returned in capture order; empty when the scenario produced none.
+    """
+    scenario_dir = out_dir / scenario_id
+    if not scenario_dir.is_dir():
+        return []
+    shots = sorted(scenario_dir.glob("step-*.png"))
+    return [(Path(scenario_id) / p.name).as_posix() for p in shots]
 
 
 def _assertion_kind_map(plan: Plan) -> dict[str, str]:
