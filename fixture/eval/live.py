@@ -57,7 +57,7 @@ async def run_live_eval(
             error = clean is Verdict.ERROR or broken is Verdict.ERROR
             false_positive = clean is Verdict.FAIL
             detected = (not ambiguous and not error and broken is Verdict.FAIL
-                        and not false_positive)
+                        and clean is Verdict.PASS)
             all_results.append(EvalScenarioResult(
                 bug_id=spec.bug_id, flow=spec.flow,
                 clean_verdict=clean, broken_verdict=broken,

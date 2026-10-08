@@ -247,21 +247,15 @@ async def _execute_scenario(
     run_id: str,
     factory: ScenarioAdapterFactory,
 ) -> ScenarioResult:
-    """Run one scenario: goal → assertions → verdict.
-
-    Records wall-clock duration on the result (used by junit.xml and reports).
-    """
+    """Run one scenario: goal, assertions, adjudication, then cleanup."""
     started = time.monotonic()
     try:
         adapter = await factory.create(scenario)
     except Exception as exc:  # noqa: BLE001
         return ScenarioResult(
-            scenario_id=scenario.id,
-            scenario_title=scenario.title,
-            verdict=Verdict.ERROR,
-            reason=f"failed to create scenario adapter: {exc}",
-            run_id=run_id,
-            duration_s=time.monotonic() - started,
+            scenario_id=scenario.id, scenario_title=scenario.title,
+            verdict=Verdict.ERROR, reason=f"failed to create scenario adapter: {exc}",
+            run_id=run_id, duration_s=time.monotonic() - started,
         )
 
     try:
@@ -273,7 +267,7 @@ async def _execute_scenario(
                 await close()
             except Exception:
                 pass
-        raise  # propagate to run_plan for uniform handling
+        raise
     except Exception as exc:  # noqa: BLE001
         close = getattr(adapter, "close", None)
         if close is not None:
@@ -282,21 +276,28 @@ async def _execute_scenario(
             except Exception:
                 pass
         return ScenarioResult(
-            scenario_id=scenario.id,
-            scenario_title=scenario.title,
-            verdict=Verdict.ERROR,
-            reason=f"scenario goal execution failed: {exc}",
-            run_id=run_id,
+            scenario_id=scenario.id, scenario_title=scenario.title,
+            verdict=Verdict.ERROR, reason=f"scenario goal execution failed: {exc}",
+            run_id=run_id, stages=getattr(adapter, "execution_logs", lambda: [])(),
             duration_s=time.monotonic() - started,
         )
 
-    outcomes = await _check_assertions(scenario, adapter)
-    verdict, reason = _scenario_verdict(outcomes, scenario.assertions)
+    try:
+        outcomes = await _check_assertions(scenario, adapter)
+    except BudgetExhausted:
+        close = getattr(adapter, "close", None)
+        if close is not None:
+            try:
+                await close()
+            except Exception:
+                pass
+        raise
+    except Exception as exc:  # noqa: BLE001
+        outcomes = [AssertionOutcome(a.id, Verdict.ERROR,
+                    f"assertion evaluation interrupted: {exc}") for a in scenario.assertions]
 
+    verdict, reason = _scenario_verdict(outcomes, scenario.assertions)
     if verdict is Verdict.FAIL:
-        # Independent fresh-eyes review before a FAIL is recorded as a
-        # confirmed application failure.  Adapters without adjudication pass
-        # through untouched (getattr keeps the executor adapter-agnostic).
         adjudicate = getattr(adapter, "adjudicate_fail", None)
         if adjudicate is not None:
             try:
@@ -309,14 +310,18 @@ async def _execute_scenario(
                     except Exception:
                         pass
                 raise
-            except Exception as exc:  # noqa: BLE001 — reviewer fault, not the app's
-                new_verdict, note = (
-                    Verdict.FAIL,
-                    f" [adjudicator errored ({exc}); original FAIL stands]",
-                )
+            except Exception as exc:  # noqa: BLE001
+                new_verdict, note = Verdict.FAIL, f" [adjudicator errored ({exc}); original FAIL stands]"
             if note:
                 reason = f"{reason}{note}"
             verdict = new_verdict
+
+    status = getattr(adapter, "execution_status", None)
+    if verdict is Verdict.PASS and status is not None:
+        goal_verdict, goal_reason = status()
+        if goal_verdict is not Verdict.PASS:
+            verdict = Verdict.UNVERIFIED
+            reason = f"assertions passed but goal execution was {goal_verdict.value}: {goal_reason}"
 
     close_error: Exception | None = None
     close = getattr(adapter, "close", None)
@@ -327,26 +332,19 @@ async def _execute_scenario(
             close_error = exc
     if close_error is not None:
         return ScenarioResult(
-            scenario_id=scenario.id,
-            scenario_title=scenario.title,
-            verdict=Verdict.ERROR,
-            reason=f"scenario cleanup failed: {close_error}",
-            run_id=run_id,
-            duration_s=time.monotonic() - started,
+            scenario_id=scenario.id, scenario_title=scenario.title,
+            verdict=Verdict.ERROR, reason=f"scenario cleanup failed: {close_error}",
+            run_id=run_id, duration_s=time.monotonic() - started,
         )
 
     return ScenarioResult(
-        scenario_id=scenario.id,
-        scenario_title=scenario.title,
-        verdict=verdict,
-        reason=reason,
-        run_id=run_id,
+        scenario_id=scenario.id, scenario_title=scenario.title,
+        verdict=verdict, reason=reason, run_id=run_id,
+        assertion_outcomes=outcomes,
+        stages=getattr(adapter, "execution_logs", lambda: [])(),
         assertions_checked=[o.assertion_id for o in outcomes],
-        assertion_evidence={
-            o.assertion_id: (o.evidence or o.reason)
-            for o in outcomes
-            if o.evidence or o.reason
-        },
+        assertion_evidence={o.assertion_id: (o.evidence or o.reason)
+                            for o in outcomes if o.evidence or o.reason},
         duration_s=time.monotonic() - started,
     )
 
@@ -358,14 +356,7 @@ async def _retry_failed_scenario(
     first_result: ScenarioResult,
     max_retries: int,
 ) -> ScenarioResult:
-    """Re-run a FAILED scenario to separate flakes from real defects.
-
-    Each retry uses a fresh adapter from the factory (a fresh browser session
-    for real runs).  A retry that passes is reported as PASS with ``flaky=True``
-    and both attempts' reasons preserved in the reason string — a flake is
-    never silently laundered into a clean PASS.  Only FAIL is retried: ERROR
-    is a harness problem and stays loud.
-    """
+    """Retry confirmed failures with fresh adapters and preserve flake evidence."""
     result = first_result
     for attempt in range(2, max_retries + 2):
         retry = await _execute_scenario(scenario, run_id, factory)
@@ -379,7 +370,7 @@ async def _retry_failed_scenario(
             return retry
         retry.reason = (
             f"{retry.reason} (attempt {attempt} of {max_retries + 1}; "
-            f"failed on every attempt)"
+            "failed on every attempt)"
         )
         result = retry
     return result
@@ -392,11 +383,24 @@ async def _check_assertions(
     """Evaluate every assertion in *scenario* against the current browser state."""
     outcomes: list[AssertionOutcome] = []
     for assertion in scenario.assertions:
-        assessor = getattr(adapter, "assess_assertion", None)
-        if assertion.check is None and assessor is not None:
-            outcome = await assessor(assertion)
-        else:
-            outcome = await evaluate_assertion(assertion, adapter)
+        try:
+            assessor = getattr(adapter, "assess_assertion", None)
+            if assertion.timing == "checkpoint":
+                outcome = (await assessor(assertion) if assessor is not None else AssertionOutcome(
+                    assertion.id, Verdict.UNVERIFIED, "checkpoint evaluator unavailable",
+                    evaluator="unverified",
+                ))
+            else:
+                # Missing checks must not inherit a generic agent PASS.
+                outcome = await evaluate_assertion(assertion, adapter)
+                capture = getattr(adapter, "capture_assertion_evidence", None)
+                if capture is not None:
+                    outcome = await capture(assertion, outcome)
+        except BudgetExhausted:
+            raise
+        except Exception as exc:
+            outcome = AssertionOutcome(assertion.id, Verdict.ERROR,
+                                       f"assertion evaluation interrupted: {exc}")
         outcomes.append(outcome)
     return outcomes
 

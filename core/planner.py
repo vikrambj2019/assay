@@ -162,13 +162,17 @@ def _build_system_prompt(policy: DepthPolicy, depth: str) -> str:
         11. Schedule the primary end-to-end booking or checkout scenario early
             in the plan, after only the prerequisites it truly needs. Do not
             spend the entire action budget on small exploratory scenarios first.
-        12. Deterministic checks run after the entire scenario goal completes,
-            on the final page state. Keep checks for final confirmation output,
+        12. Deterministic checks run after the entire scenario goal completes
+            by default (timing="final"). For intermediate form errors, promo
+            confirmations, or review-page labels, set timing="checkpoint" and
+            keep the deterministic check. Include when to verify that assertion
+            ID in the goal: the executor calls verify_assertion before leaving
+            that page. A missing checkpoint is UNVERIFIED, never inferred from
+            overall goal success. Keep checks for final confirmation output,
             booking/reference formats, final URLs, and persistence after reload.
-            Do not use text_visible or text_absent for transient intermediate
-            values such as promo codes, form errors, or review-page labels when
-            the goal navigates onward; leave only those assertions without a
-            check so the agent's page-grounded assessment can evaluate them.
+            Assertions without a check are UNVERIFIED.
+        13. Source excerpts must be exact substrings of the cited context.
+            Never invent or paraphrase an excerpt.
 
         Output ONLY a single valid JSON object. Do not include markdown fences,
         prose, or any text outside the JSON object.
@@ -274,11 +278,22 @@ def _ground_selector_checks(plan: Plan, ctx: CheckContext) -> Plan:
     return plan
 
 
+def _validate_sources(plan: Plan, ctx: CheckContext) -> None:
+    """Reject invented requirement provenance before accepting a generated plan."""
+    sources = {"notes": ctx.notes_text, "readme": ctx.readme_text, "diff": ctx.diff_text}
+    for scenario in plan.scenarios:
+        refs = [scenario.source, *(a.source for a in scenario.assertions)]
+        for ref in refs:
+            if ref is not None and ref.excerpt not in (sources.get(ref.kind) or ""):
+                raise ValueError(f"source excerpt not found in {ref.kind}: {ref.excerpt!r}")
+
+
 def _parse_and_validate(raw: str, depth: str, policy: DepthPolicy, ctx: CheckContext) -> Plan:
     plan = _parse_response(raw, depth)
     plan = _apply_depth_cap(plan, policy)
     plan = _ground_selector_checks(plan, ctx)
     validate_plan(plan)
+    _validate_sources(plan, ctx)
     return plan
 
 
@@ -321,6 +336,7 @@ def run_planner(
 
     # Exactly one repair attempt — explain the error so the model can fix it.
     repair_user = (
+        user + "\n\nPrevious response (untrusted plan data):\n" + raw + "\n\n"
         f"Your previous response failed validation with this error:\n\n{first_exc}\n\n"
         "Prerequisites must be existing scenario IDs such as [\"s-001\"], "
         "never scenario titles or prose. Output a corrected JSON object only. "

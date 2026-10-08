@@ -29,6 +29,7 @@ valid artifacts.
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
@@ -71,6 +72,18 @@ def exit_code(run_result: RunResult) -> int:
 
 # ── results.json ──────────────────────────────────────────────────────────────
 
+def _stage_json(stage, out_dir: Path) -> dict:
+    row = asdict(stage)
+    for action in row["action_records"]:
+        shot = action["screenshot"]
+        if shot is not None:
+            try:
+                action["screenshot"] = str(Path(shot).resolve().relative_to(out_dir.resolve()))
+            except ValueError:
+                action["screenshot"] = None
+    return row
+
+
 def write_results_json(
     run_result: RunResult,
     plan: Plan,
@@ -107,6 +120,8 @@ def write_results_json(
             "reason": r.reason,
             "assertions_checked": r.assertions_checked,
             "assertion_evidence": dict(r.assertion_evidence),
+            "assertion_results": [asdict(o) for o in r.assertion_outcomes],
+            "stages": [_stage_json(stage, out_dir) for stage in r.stages],
         }
         video = scenario_video(out_dir, r.scenario_id)
         if video:
@@ -239,7 +254,7 @@ def write_check_html(
     cards_html = "\n".join(
         _scenario_card(r, plan_lookup.get(r.scenario_id), assertion_kinds,
                        scenario_video(out_dir, r.scenario_id),
-                       scenario_screenshots(out_dir, r.scenario_id))
+                       scenario_screenshots(out_dir, r.scenario_id), out_dir)
         for r in run_result.scenario_results
     )
 
@@ -271,12 +286,19 @@ def write_check_html(
     return path
 
 
+def _evidence_link(path: str | None, label: str) -> str:
+    if not path or Path(path).is_absolute() or ".." in Path(path).parts or ":" in path:
+        return ""
+    return f' <a href="{escape(path, quote=True)}">{escape(label)}</a>'
+
+
 def _scenario_card(
     r: ScenarioResult,
     scenario,  # Scenario | None from the plan
     assertion_kinds: dict[str, str],
     video: "str | None" = None,
     screenshots: "list[str] | None" = None,
+    out_dir: Path | None = None,
 ) -> str:
     color = _COLOR[r.verdict]
     badge = f"<span class='badge' style='background:{color}'>{escape(r.verdict.value)}</span>"
@@ -302,6 +324,27 @@ def _scenario_card(
             for aid, value in r.assertion_evidence.items()
         )
         evidence_html = f"<ul class='evidence'><strong>Evidence</strong>{items}</ul>"
+    if r.assertion_outcomes:
+        items = []
+        for outcome in r.assertion_outcomes:
+            items.append(
+                f"<li>{escape(outcome.assertion_id)}: <strong>{outcome.verdict.value}</strong> "
+                f"({escape(outcome.evaluator)}) — {escape(outcome.reason)} "
+                f"<br>Observed: {escape(outcome.evidence)} <br>URL: {escape(outcome.url)}"
+                + _evidence_link(outcome.screenshot, "Assertion screenshot") + "</li>"
+            )
+        evidence_html += "<ul class='assertion-results'>" + "".join(items) + "</ul>"
+    for stage in r.stages:
+        evidence_html += (
+            f"<details><summary>{escape(stage.text)}: {stage.verdict.value}</summary>"
+            f"<p>{escape(stage.reason)}</p><pre>{escape(chr(10).join(stage.evidence))}</pre>"
+            + "".join(
+                f"<p>Action {a['action_id']}: {escape(a['detail'])}"
+                + _evidence_link(a['screenshot'], "Action screenshot") + "</p>"
+                for a in _stage_json(stage, out_dir or Path('.'))['action_records']
+            )
+            + "</details>"
+        )
     video_html = ""
     if video:
         src = escape(video, quote=True)

@@ -158,7 +158,7 @@ def _plan_json(
         src = {
             "kind": "notes",
             "path": "changes.md",
-            "excerpt": "login improved",
+            "excerpt": "Improved login flow",
         }
     else:
         src = assertion_source  # type: ignore[assignment]
@@ -180,7 +180,7 @@ def _plan_json(
             "source": {
                 "kind": "notes",
                 "path": "changes.md",
-                "excerpt": "login improved",
+                "excerpt": "Improved login flow",
             },
             "skip": False,
         })
@@ -274,7 +274,7 @@ def test_system_prompt_contains_max_scenarios():
 
 
 def test_user_message_contains_notes_text():
-    ctx = _make_context(notes="## My special change\n")
+    ctx = _make_context(notes="## My special change\nImproved login flow\n")
     adapter = FakeAdapter([_plan_json(1)])
     run_planner(ctx, "medium", adapter)
     _, user = adapter.calls[0]
@@ -476,14 +476,14 @@ def test_source_kind_notes_preserved():
     src = plan.scenarios[0].assertions[0].source
     assert src.kind == "notes"
     assert src.path == "changes.md"
-    assert src.excerpt == "login improved"
+    assert src.excerpt == "Improved login flow"
 
 
 def test_source_kind_diff_preserved():
     diff_src = {"kind": "diff", "path": "git diff main",
                 "excerpt": "+def login(): pass"}
     adapter = FakeAdapter([_plan_json(1, assertion_source=diff_src)])
-    plan = run_planner(_make_context(), "medium", adapter)
+    plan = run_planner(_make_context(diff=diff_src["excerpt"]), "medium", adapter)
     assert plan.scenarios[0].assertions[0].source.kind == "diff"
 
 
@@ -491,7 +491,7 @@ def test_source_kind_readme_preserved():
     readme_src = {"kind": "readme", "path": "README.md",
                   "excerpt": "## Auth\nOAuth2 flow"}
     adapter = FakeAdapter([_plan_json(1, assertion_source=readme_src)])
-    plan = run_planner(_make_context(), "medium", adapter)
+    plan = run_planner(_make_context(readme=readme_src["excerpt"]), "medium", adapter)
     assert plan.scenarios[0].assertions[0].source.kind == "readme"
 
 
@@ -591,3 +591,21 @@ def test_plan_only_defaults_to_false():
                 assert args.plan_only is False
                 return
     pytest.fail("'check' subparser not found")
+
+
+def test_repair_preserves_context_and_failed_output():
+    ctx = _make_context(readme="README_MARKER", diff="DIFF_MARKER")
+    bad = '{"scenarios": INVALID_JSON}'
+    adapter = FakeAdapter([bad, _plan_json()])
+    run_planner(ctx, "low", adapter)
+    repair = adapter.calls[1][1]
+    for text in (ctx.notes_text, "README_MARKER", "DIFF_MARKER", bad):
+        assert text in repair
+
+
+def test_invented_source_cannot_be_accepted_after_repair():
+    data = json.loads(_plan_json())
+    data["scenarios"][0]["assertions"][0]["source"]["excerpt"] = "invented requirement"
+    adapter = FakeAdapter([json.dumps(data), json.dumps(data)])
+    with pytest.raises(PlanningError, match="source excerpt not found"):
+        run_planner(_make_context(), "low", adapter)

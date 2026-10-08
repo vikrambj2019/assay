@@ -406,22 +406,22 @@ async def test_semantic_assertion_reason_mentions_model_evaluated():
 
 
 @pytest.mark.asyncio
-async def test_executor_uses_agent_assessment_for_semantic_assertion():
+async def test_executor_does_not_inherit_agent_pass_for_semantic_assertion():
     s = _scenario("s-001", assertions=[_req_assertion("a-1", check=None)])
     plan = make_plan("medium", [s])
     adapter = AssessedScenarioAdapter(Verdict.PASS)
     result = await run_plan(plan, _mp(), FakeAdapterFactory(default=adapter))
-    assert result.scenario_results[0].verdict is Verdict.PASS
-    assert result.scenario_results[0].assertion_evidence["a-1"] == "page confirms outcome"
+    assert result.scenario_results[0].verdict is Verdict.UNVERIFIED
+    assert "no deterministic check" in result.scenario_results[0].assertion_evidence["a-1"]
 
 
 @pytest.mark.asyncio
-async def test_agent_assessment_fail_is_a_confirmed_failure():
+async def test_unscoped_agent_fail_is_not_a_confirmed_assertion_failure():
     s = _scenario("s-001", assertions=[_req_assertion("a-1", check=None)])
     plan = make_plan("medium", [s])
     adapter = AssessedScenarioAdapter(Verdict.FAIL, reason="required outcome absent")
     result = await run_plan(plan, _mp(), FakeAdapterFactory(default=adapter))
-    assert result.scenario_results[0].verdict is Verdict.FAIL
+    assert result.scenario_results[0].verdict is Verdict.UNVERIFIED
 
 
 @pytest.mark.asyncio
@@ -725,7 +725,9 @@ class _ScriptedAdapter(FakeScenarioAdapter):
 
 
 def _semantic(sid: str, **kw) -> Scenario:
-    return _scenario(sid, assertions=[_req_assertion("a-1", check=None)], **kw)
+    assertion = _req_assertion("a-1", check=None)
+    assertion.timing = "checkpoint"
+    return _scenario(sid, assertions=[assertion], **kw)
 
 
 @pytest.mark.asyncio

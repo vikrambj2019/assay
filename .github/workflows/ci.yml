@@ -42,6 +42,9 @@ jobs:
             tests/test_context.py \
             tests/test_env_config.py \
             tests/test_fixture_ground_truth.py \
+            tests/test_verification_integrity.py \
+            tests/test_live_eval_runner.py \
+            tests/test_cli_machine_interface.py \
             -v --tb=short
           # test_redact.py has browser-integration tests mixed with unit tests;
           # the full file runs in the browser-tests job below.
@@ -91,11 +94,6 @@ jobs:
           pip install -e ".[dev]"
           playwright install chromium --with-deps
 
-      - name: Start fixture app
-        run: |
-          flask --app fixture.app.factory:create_app run --port 5173 &
-          sleep 2
-
       - name: Run live evaluation
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -103,4 +101,12 @@ jobs:
           ASSAY_DEPTH: low
           ASSAY_ALLOW_MUTATIONS: "false"
         run: |
-          ASSAY_EVAL_LIVE=1 agent suite suites/fixture-demo.yaml
+          ASSAY_EVAL_LIVE=1 python -m fixture.eval.runner --runs 3 --model-version "${ASSAY_MODEL:-claude-sonnet-5}"
+
+      - name: Upload evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-evaluation
+          path: results/live-eval/
+          if-no-files-found: warn

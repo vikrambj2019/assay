@@ -15,7 +15,7 @@ from core.adjudicate import (
     Adjudicator,
     adjudicate_fail,
 )
-from core.assertions import AssertionOutcome
+from core.assertions import AssertionOutcome, evaluate_assertion
 from core.auth import resolve_auth_setup, verify_authenticated, AuthMode
 from core.settle import settle
 from core.schema import Verdict
@@ -35,12 +35,14 @@ class BrowserScenarioAdapter:
         self.adjudicator = adjudicator
         self._goal_logs = []
         self._goal = ""
+        self._checkpoint_outcomes: dict[str, AssertionOutcome] = {}
 
     async def run_goal(self, scenario: Scenario) -> None:
         self._goal = scenario.goal
         logs = await run_goal(
             self.session, scenario.goal, self.cfg, self.out_dir,
-            budget=self.budget,
+            budget=self.budget, assertions=scenario.assertions,
+            checker=self, checkpoint_outcomes=self._checkpoint_outcomes,
         )
         self._goal_logs = logs
         errors = [log.reason for log in logs if log.verdict is Verdict.ERROR]
@@ -51,28 +53,28 @@ class BrowserScenarioAdapter:
         # stall detection is structural (consecutive failed actions), not textual.
 
     async def assess_assertion(self, assertion: Assertion) -> AssertionOutcome:
-        """Use the page-grounded agent assessment for semantic assertions."""
-        if not self._goal_logs:
-            return AssertionOutcome(
+        """An overall agent verdict is never evidence for an assertion."""
+        if assertion.timing == "checkpoint":
+            return self._checkpoint_outcomes.get(assertion.id, AssertionOutcome(
                 assertion.id, Verdict.UNVERIFIED,
-                "no agent assessment was recorded for this assertion",
-            )
+                "required checkpoint was not verified during the scenario",
+                evaluator="unverified",
+            ))
+        return await evaluate_assertion(assertion, self)
+
+    async def capture_assertion_evidence(self, assertion, outcome):
+        from harness.verification import capture_outcome
+        records = [r for log in self._goal_logs for r in log.action_records]
+        return await capture_outcome(self.session, assertion, outcome, records, self.out_dir)
+
+    def execution_status(self):
+        if not self._goal_logs:
+            return Verdict.UNVERIFIED, "agent produced no completion evidence"
         final = self._goal_logs[-1]
-        if final.verdict is Verdict.PASS:
-            return AssertionOutcome(
-                assertion.id, Verdict.PASS,
-                f"agent assessment: {final.reason}", final.reason,
-            )
-        if final.verdict is Verdict.FAIL:
-            return AssertionOutcome(
-                assertion.id, Verdict.FAIL,
-                f"agent assessment: {final.reason}", final.reason,
-            )
-        return AssertionOutcome(
-            assertion.id, Verdict.UNVERIFIED,
-            f"agent assessment was {final.verdict.value}: {final.reason}",
-            final.reason,
-        )
+        return final.verdict, final.reason
+
+    def execution_logs(self):
+        return self._goal_logs
 
     async def adjudicate_fail(
         self,

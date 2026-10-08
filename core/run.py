@@ -21,7 +21,8 @@ from dataclasses import dataclass, field
 
 from core.plan import Plan, Scenario
 from core.policy import MutationPolicy
-from core.schema import Verdict
+from core.schema import Verdict, StepLog
+from core.assertions import AssertionOutcome
 
 
 # ── Run identity ──────────────────────────────────────────────────────────────
@@ -54,6 +55,8 @@ class ScenarioResult:
     run_id: str
     assertions_checked: list[str] = field(default_factory=list)
     assertion_evidence: dict[str, str] = field(default_factory=dict)
+    assertion_outcomes: list[AssertionOutcome] = field(default_factory=list)
+    stages: list[StepLog] = field(default_factory=list)
     duration_s: float | None = None  # wall-clock seconds for this scenario
     attempt: int = 1                # 1 = first try; >1 when flake-retry re-ran it
     flaky: bool = False             # True when an earlier attempt failed but a retry passed
